@@ -1,0 +1,107 @@
+@extends('layouts.admin')
+
+@php
+    use App\Support\AdminUi;
+
+    $titleField = collect([
+        'catalog_name',
+        'business_name',
+        'store_name',
+        'title',
+        'name',
+        'order_number',
+        'subject',
+        'referral_code',
+        'setting_key',
+    ])->first(fn ($field) => isset($item->{$field}) && $item->{$field} !== null && $item->{$field} !== '');
+
+    $pageTitle = $titleField ? (string) $item->{$titleField} : AdminUi::singularTitle($module);
+@endphp
+
+@section('page_action', 'show')
+@section('title', 'View ' . AdminUi::singularTitle($module))
+
+@section('content')
+    <section class="module-screen narrow">
+        <div class="screen-head">
+            <a class="back-link" href="{{ route('admin.module.index', $module) }}">&larr; Back to {{ $config['title'] }}</a>
+            @if($config['editable'] ?? true)
+                <a class="primary-button" href="{{ route('admin.module.edit', [$module, $item->id]) }}">Edit {{ AdminUi::singularTitle($module) }}</a>
+            @endif
+        </div>
+
+        <section class="panel">
+            <div class="page-block__header">
+                <div>
+                    <h3>{{ $pageTitle }}</h3>
+                    <p>{{ $subtitle ?? 'View record details from the Muhalli admin workflow.' }}</p>
+                </div>
+                @if(isset($item->status))
+                    <span class="status-chip {{ AdminUi::statusBadgeClass($item->status) }}">{{ ucfirst((string) $item->status) }}</span>
+                @endif
+            </div>
+
+            @if(!empty($item->image_url ?? null))
+                <div style="margin-bottom: 20px;">
+                    <img src="{{ $item->image_url }}" alt="{{ $pageTitle }}" style="max-width: 220px; width: 100%; border-radius: 18px; object-fit: cover;">
+                </div>
+            @endif
+
+            <div class="detail-grid">
+                @foreach((array) $item as $key => $value)
+                    @continue(in_array($key, ['password_hash'], true))
+                    <div>
+                        <strong>{{ AdminUi::columnLabel($key) }}</strong>
+                        @if($key === 'status')
+                            <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ ucfirst((string) $value) }}</span>
+                        @else
+                            <span>{{ AdminUi::formatTableValue($key, $value) }}</span>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </section>
+
+        @foreach($related as $block)
+            <section class="panel">
+                <div class="page-block__header">
+                    <div>
+                        <h3>{{ $block['title'] }}</h3>
+                        <p>{{ $block['subtitle'] }}</p>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            @foreach($block['columns'] as $column)
+                                <th>{{ AdminUi::columnLabel($column) }}</th>
+                            @endforeach
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @forelse($block['rows'] as $row)
+                            <tr>
+                                @foreach($block['columns'] as $column)
+                                    @php $value = data_get($row, $column); @endphp
+                                    <td>
+                                        @if($column === 'status')
+                                            <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ ucfirst((string) $value) }}</span>
+                                        @else
+                                            {{ AdminUi::formatTableValue($column, $value) }}
+                                        @endif
+                                    </td>
+                                @endforeach
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="{{ count($block['columns']) }}" class="subtle">No related records found.</td>
+                            </tr>
+                        @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        @endforeach
+    </section>
+@endsection
