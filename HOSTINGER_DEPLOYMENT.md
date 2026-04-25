@@ -56,3 +56,17 @@ storage/logs/laravel-YYYY-MM-DD.log
 ```
 
 The same error is also sent to PHP's error log through the `errorlog` channel, which can help when checking Hostinger logs.
+
+## Android API URL
+
+Use this base URL in the Android app:
+
+```text
+https://mhally.com/api/index.php
+```
+
+The compatibility files at `api/index.php` and `public/api/index.php` boot Laravel and send requests to `App\Http\Controllers\LegacyApiController`, so old query-string endpoints continue to work in either shared-hosting layout:
+
+```text
+https://mhally.com/api/index.php?endpoint=buyer/home
+```
