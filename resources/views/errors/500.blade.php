@@ -68,7 +68,7 @@
     <main>
         <h1>Server-side issue in Mhally Admin</h1>
         <p>The request reached the admin panel, but Laravel hit an internal error. The full details were saved in the server log with this reference ID.</p>
-        <code>{{ $errorId }}</code>
+        <code>{{ $errorId ?? 'Check storage/logs/laravel-YYYY-MM-DD.log' }}</code>
     </main>
 </body>
 </html>

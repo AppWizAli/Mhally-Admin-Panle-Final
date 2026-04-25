@@ -9,6 +9,7 @@ This project includes a root `.htaccess` file that sends all web requests to Lar
 ## Required files
 
 - Upload `.env`; it contains the production app URL and database connection.
+- Make sure `.env` includes a non-empty `APP_KEY=base64:...` value. Laravel POST requests, sessions, and encryption fail with HTTP 500 if this is missing.
 - Upload `vendor` if Hostinger SSH/composer is not available.
 - Upload `public`, `app`, `bootstrap`, `config`, `database`, `resources`, `routes`, and `storage`.
 
@@ -36,6 +37,12 @@ php artisan route:clear
 php artisan view:clear
 php artisan cache:clear
 php artisan config:cache
+```
+
+Only run this if `.env` has no `APP_KEY` value:
+
+```bash
+php artisan key:generate --force
 ```
 
 If SSH is not available, upload the project after running the clear commands locally and make sure `bootstrap/cache` does not contain old cached config from another domain.

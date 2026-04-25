@@ -50,8 +50,7 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $e)
     {
-        $response = parent::render($request, $e);
-        $statusCode = method_exists($response, 'getStatusCode') ? $response->getStatusCode() : 500;
+        $statusCode = $this->isHttpException($e) ? $e->getStatusCode() : 500;
 
         if ($statusCode >= 500 && ! config('app.debug')) {
             $errorId = (string) Str::uuid();
@@ -66,7 +65,6 @@ class Handler extends ExceptionHandler
                     'method' => $request->method(),
                     'url' => $request->url(),
                     'route' => optional($request->route())->getName(),
-                    'admin_id' => $request->hasSession() ? data_get($request->session()->get('admin_user', []), 'id') : null,
                     'ip' => $request->ip(),
                 ]);
             } catch (Throwable $loggingException) {
@@ -83,7 +81,7 @@ class Handler extends ExceptionHandler
             return response($this->productionErrorHtml($errorId), $statusCode);
         }
 
-        return $response;
+        return parent::render($request, $e);
     }
 
     private function productionErrorHtml(string $errorId): string
