@@ -73,7 +73,7 @@
         @endif
 
         @if($errors->any())
-            <div class="alert danger">{{ $errors->first() }}</div>
+            <div class="alert danger">{{ in_array($pageAction, ['create', 'edit'], true) ? 'Please review the highlighted fields below and try again.' : $errors->first() }}</div>
         @endif
 
         <main class="page-grid">

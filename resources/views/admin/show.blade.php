@@ -41,9 +41,9 @@
                 @endif
             </div>
 
-            @if(!empty($item->image_url ?? null))
-                <div style="margin-bottom: 20px;">
-                    <img src="{{ $item->image_url }}" alt="{{ $pageTitle }}" style="max-width: 220px; width: 100%; border-radius: 18px; object-fit: cover;">
+            @if(!empty($item->image_url ?? null) && AdminUi::isImageReference($item->image_url))
+                <div class="detail-hero-media">
+                    <img src="{{ AdminUi::mediaUrl($item->image_url) }}" alt="{{ $pageTitle }}">
                 </div>
             @endif
 
@@ -54,6 +54,11 @@
                         <strong>{{ AdminUi::columnLabel($key) }}</strong>
                         @if($key === 'status')
                             <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ ucfirst((string) $value) }}</span>
+                        @elseif(in_array($key, ['image_url', 'emoji', 'icon'], true) && AdminUi::isImageReference($value))
+                            <div class="detail-media">
+                                <img src="{{ AdminUi::mediaUrl($value) }}" alt="{{ AdminUi::columnLabel($key) }}">
+                                <small>{{ $value }}</small>
+                            </div>
                         @else
                             <span>{{ AdminUi::formatTableValue($key, $value) }}</span>
                         @endif

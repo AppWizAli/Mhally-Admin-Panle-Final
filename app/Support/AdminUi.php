@@ -130,6 +130,32 @@ class AdminUi
         return (string) $value;
     }
 
+    public static function mediaUrl($value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://') || str_starts_with($value, '/')) {
+            return $value;
+        }
+
+        return '/' . ltrim($value, '/');
+    }
+
+    public static function isImageReference($value): bool
+    {
+        $url = self::mediaUrl($value);
+        if ($url === '') {
+            return false;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?: $url;
+
+        return (bool) preg_match('/\.(png|jpe?g|webp|gif)$/i', (string) $path);
+    }
+
     public static function columnLabel(string $column): string
     {
         return match ($column) {
@@ -138,6 +164,9 @@ class AdminUi
             'supplier_id' => 'Supplier',
             'supplier_product_id' => 'Supplier Product',
             'category_id' => 'Category',
+            'icon' => 'Icon Image',
+            'emoji' => 'Emoji Image',
+            'image_url' => 'Image',
             'catalog_name', 'product_name' => 'Product',
             'business_name', 'supplier_name' => 'Supplier',
             'store_name', 'buyer_name' => str_contains($column, 'store') ? 'Store' : 'Buyer',
@@ -181,7 +210,7 @@ class AdminUi
             'buyers' => (string) ($item->store_name ?? ''),
             'offers' => (string) ($item->title ?? ''),
             'notifications' => (string) ($item->title ?? ''),
-            'categories' => trim((string) ($item->icon ?? '') . ' ' . (string) ($item->name ?? '')),
+            'categories' => trim((self::isImageReference($item->icon ?? null) ? '' : (string) ($item->icon ?? '')) . ' ' . (string) ($item->name ?? '')),
             'orders' => (string) ($item->order_number ?? ''),
             'chats' => (string) ($item->store_name ?? ''),
             'referral_claims' => (string) ($item->referrer_store_name ?? $item->referral_code ?? ''),

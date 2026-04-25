@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\AdminUi;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -147,8 +149,9 @@ class AdminController extends Controller
         $config = $this->module($module);
         $item = null;
         $fieldOptions = $this->fieldOptions($module);
+        $requiredFields = $this->requiredFieldMap($this->validationRules($module, $config));
 
-        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions'));
+        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions', 'requiredFields'));
     }
 
     public function edit(string $module, int $id)
@@ -157,8 +160,9 @@ class AdminController extends Controller
         $item = DB::table($config['table'])->where('id', $id)->first();
         abort_if(!$item, 404);
         $fieldOptions = $this->fieldOptions($module);
+        $requiredFields = $this->requiredFieldMap($this->validationRules($module, $config, $id));
 
-        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions'));
+        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions', 'requiredFields'));
     }
 
     public function store(string $module, Request $request)
@@ -166,7 +170,7 @@ class AdminController extends Controller
         $config = $this->module($module);
         $this->validateModuleRequest($module, $config, $request);
 
-        $data = $this->payload($config, $request);
+        $data = $this->payload($module, $config, $request);
         $data = $this->applyModuleDefaults($module, $config['table'], $data);
         if (Schema::hasColumn($config['table'], 'created_at')) {
             $data['created_at'] = now();
@@ -187,9 +191,11 @@ class AdminController extends Controller
     public function update(string $module, int $id, Request $request)
     {
         $config = $this->module($module);
+        $item = DB::table($config['table'])->where('id', $id)->first();
+        abort_if(!$item, 404);
         $this->validateModuleRequest($module, $config, $request, $id);
 
-        $data = $this->payload($config, $request);
+        $data = $this->payload($module, $config, $request, $item);
         if (Schema::hasColumn($config['table'], 'updated_at')) {
             $data['updated_at'] = now();
         }
@@ -312,7 +318,7 @@ class AdminController extends Controller
         return redirect()->route('admin.module.show', ['module' => 'chats', 'id' => $id])->with('status', 'Message sent.');
     }
 
-    private function payload(array $config, Request $request): array
+    private function payload(string $module, array $config, Request $request, ?object $existingItem = null): array
     {
         $data = [];
         $table = $config['table'];
@@ -324,6 +330,11 @@ class AdminController extends Controller
 
             if ($type === 'checkbox') {
                 $data[$field] = $request->boolean($field) ? 1 : 0;
+                continue;
+            }
+
+            if ($type === 'file') {
+                $data[$field] = $this->storeUploadedImage($request, $module, $field, data_get($existingItem, $field));
                 continue;
             }
 
@@ -351,6 +362,15 @@ class AdminController extends Controller
     }
 
     private function validateModuleRequest(string $module, array $config, Request $request, ?int $id = null): void
+    {
+        $request->validate(
+            $this->validationRules($module, $config, $id),
+            $this->validationMessages(),
+            $this->validationAttributes($config)
+        );
+    }
+
+    private function validationRules(string $module, array $config, ?int $id = null): array
     {
         $table = $config['table'];
         $rules = [];
@@ -387,6 +407,7 @@ class AdminController extends Controller
             ],
             'offers' => [
                 $add('title', ['required', 'string', 'max:190']),
+                $add('image_url', ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096']),
                 $add('supplier_id', ['nullable', 'integer', Rule::exists('suppliers', 'id')]),
                 $add('supplier_product_id', ['nullable', 'integer', Rule::exists('supplier_products', 'id')]),
                 $add('catalog_product_id', ['nullable', 'integer', Rule::exists('catalog_products', 'id')]),
@@ -397,10 +418,13 @@ class AdminController extends Controller
             'catalog_products' => [
                 $add('category_id', ['required', 'integer', Rule::exists('categories', 'id')]),
                 $add('name', ['required', 'string', 'max:180']),
+                $add('emoji', ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048']),
+                $add('image_url', ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096']),
                 $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'draft', 'archived'])]),
             ],
             'categories' => [
                 $add('name', ['required', 'string', 'max:120']),
+                $add('icon', ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048']),
                 $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'draft', 'archived'])]),
             ],
             'notifications' => [
@@ -411,7 +435,25 @@ class AdminController extends Controller
             default => null,
         };
 
-        $request->validate($rules, [
+        return $rules;
+    }
+
+    private function requiredFieldMap(array $rules): array
+    {
+        $requiredFields = [];
+
+        foreach ($rules as $field => $fieldRules) {
+            if (in_array('required', $fieldRules, true)) {
+                $requiredFields[$field] = true;
+            }
+        }
+
+        return $requiredFields;
+    }
+
+    private function validationMessages(): array
+    {
+        return [
             'catalog_product_id.required' => 'Select a catalog product before saving.',
             'catalog_product_id.exists' => 'The selected catalog product does not exist.',
             'supplier_id.exists' => 'The selected supplier does not exist.',
@@ -419,7 +461,25 @@ class AdminController extends Controller
             'category_id.required' => 'Select a category before saving.',
             'category_id.exists' => 'The selected category does not exist.',
             'email.unique' => 'This email already exists.',
-        ]);
+            'icon.image' => 'Choose a valid icon image file.',
+            'icon.mimes' => 'The icon image must be a JPG, PNG, or WEBP file.',
+            'emoji.image' => 'Choose a valid emoji image file.',
+            'emoji.mimes' => 'The emoji image must be a JPG, PNG, or WEBP file.',
+            'image_url.image' => 'Choose a valid image file.',
+            'image_url.mimes' => 'The image must be a JPG, PNG, or WEBP file.',
+            'image_url.max' => 'The image must be 4 MB or smaller.',
+        ];
+    }
+
+    private function validationAttributes(array $config): array
+    {
+        $attributes = [];
+
+        foreach (array_keys($config['fields']) as $field) {
+            $attributes[$field] = strtolower(AdminUi::columnLabel($field));
+        }
+
+        return $attributes;
     }
 
     private function applyModuleDefaults(string $module, string $table, array $data): array
@@ -490,6 +550,70 @@ class AdminController extends Controller
         }
 
         return $candidate;
+    }
+
+    private function storeUploadedImage(Request $request, string $module, string $field, $existingValue = null): ?string
+    {
+        if (!$request->hasFile($field)) {
+            return $existingValue ? (string) $existingValue : null;
+        }
+
+        $file = $request->file($field);
+        if (!$file instanceof UploadedFile || !$file->isValid()) {
+            return $existingValue ? (string) $existingValue : null;
+        }
+
+        [$directory, $maxPathLength] = $this->uploadTarget($module, $field);
+        $extension = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension() ?: 'jpg');
+        $extension = match ($extension) {
+            'jpeg', 'jpg' => 'jpg',
+            'png' => 'png',
+            'webp' => 'webp',
+            default => 'jpg',
+        };
+
+        $path = $this->uniqueUploadPath($directory, $extension, $maxPathLength);
+        $absoluteDirectory = public_path(trim($directory, '/'));
+        if (!is_dir($absoluteDirectory)) {
+            mkdir($absoluteDirectory, 0775, true);
+        }
+
+        $file->move($absoluteDirectory, basename($path));
+
+        return $path;
+    }
+
+    private function uploadTarget(string $module, string $field): array
+    {
+        return match ([$module, $field]) {
+            ['categories', 'icon'] => ['u/i', 32],
+            ['catalog_products', 'emoji'] => ['u/e', 16],
+            ['catalog_products', 'image_url'] => ['u/p', 255],
+            ['offers', 'image_url'] => ['u/o', 255],
+            default => ['u/m', 255],
+        };
+    }
+
+    private function uniqueUploadPath(string $directory, string $extension, int $maxPathLength): string
+    {
+        $prefix = '/' . trim($directory, '/') . '/';
+        $maxBaseLength = $maxPathLength - strlen($prefix) - strlen($extension) - 1;
+        $baseLength = min(16, max(4, $maxBaseLength));
+
+        do {
+            $filename = Str::lower(Str::random($baseLength)) . '.' . $extension;
+            $path = $prefix . $filename;
+
+            if (strlen($path) > $maxPathLength) {
+                $baseLength--;
+
+                if ($baseLength < 4) {
+                    throw new \RuntimeException('Unable to create a valid upload path for ' . $directory . '.');
+                }
+            }
+        } while (strlen($path) > $maxPathLength || file_exists(public_path(ltrim($path, '/'))));
+
+        return $path;
     }
 
     private function saveFailed(string $module, array $config, array $data, Throwable $e)
