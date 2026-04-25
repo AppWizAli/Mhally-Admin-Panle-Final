@@ -10,6 +10,7 @@ class AdminUi
     {
         return [
             'dashboard' => ['label' => 'Dashboard', 'icon' => 'grid', 'route' => route('admin.dashboard')],
+            'catalog_products' => ['label' => 'Catalog', 'icon' => 'layers', 'route' => route('admin.module.index', 'catalog_products')],
             'products' => ['label' => 'Products', 'icon' => 'box', 'route' => route('admin.module.index', 'products')],
             'suppliers' => ['label' => 'Suppliers', 'icon' => 'truck', 'route' => route('admin.module.index', 'suppliers')],
             'buyers' => ['label' => 'Buyers', 'icon' => 'users', 'route' => route('admin.module.index', 'buyers')],
@@ -28,6 +29,7 @@ class AdminUi
         $map = [
             'dashboard' => ['title' => 'Operations Dashboard', 'subtitle' => 'Control buyers, suppliers, products, orders, and app-ready APIs from one responsive panel.'],
             'products' => ['title' => 'Product Listings', 'subtitle' => 'Manage catalog products and supplier-specific listings used by both buyer and supplier flows.'],
+            'catalog_products' => ['title' => 'Catalog Products', 'subtitle' => 'Create the master products that supplier listings connect to, such as rice, oil, snacks, or cleaning items.'],
             'suppliers' => ['title' => 'Supplier Network', 'subtitle' => 'Review supplier onboarding, store details, business rules, and operational status.'],
             'buyers' => ['title' => 'Buyer Accounts', 'subtitle' => 'Maintain retailer profiles, contact details, status, and order history access.'],
             'offers' => ['title' => 'Offers & Campaigns', 'subtitle' => 'Create promotions that appear in the buyer app home experience and supplier search flows.'],
@@ -54,6 +56,7 @@ class AdminUi
     {
         return match ($module) {
             'products' => 'Product',
+            'catalog_products' => 'Catalog Product',
             'suppliers' => 'Supplier',
             'buyers' => 'Buyer',
             'offers' => 'Offer',
@@ -131,6 +134,10 @@ class AdminUi
     {
         return match ($column) {
             'order_number' => 'Order ID',
+            'catalog_product_id' => 'Catalog Product',
+            'supplier_id' => 'Supplier',
+            'supplier_product_id' => 'Supplier Product',
+            'category_id' => 'Category',
             'catalog_name', 'product_name' => 'Product',
             'business_name', 'supplier_name' => 'Supplier',
             'store_name', 'buyer_name' => str_contains($column, 'store') ? 'Store' : 'Buyer',

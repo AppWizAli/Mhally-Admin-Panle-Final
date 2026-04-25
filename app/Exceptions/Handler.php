@@ -3,8 +3,10 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -50,6 +52,10 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $e)
     {
+        if ($e instanceof ValidationException || $e instanceof HttpResponseException) {
+            return parent::render($request, $e);
+        }
+
         $statusCode = $this->isHttpException($e) ? $e->getStatusCode() : 500;
 
         if ($statusCode >= 500 && ! config('app.debug')) {

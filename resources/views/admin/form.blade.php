@@ -44,6 +44,13 @@
                                 $currentValue = old($field, data_get($item, $field));
                                 $inputType = is_array($type) ? 'select' : $type;
                                 $options = $fieldOptions[$field] ?? [];
+                                $hasRelationOptions = array_key_exists($field, $fieldOptions ?? []);
+                                $createModule = [
+                                    'catalog_product_id' => 'catalog_products',
+                                    'supplier_id' => 'suppliers',
+                                    'supplier_product_id' => 'products',
+                                    'category_id' => 'categories',
+                                ][$field] ?? null;
                             @endphp
                             <label class="{{ $inputType === 'checkbox' ? 'check-row' : '' }}">
                                 @if($inputType === 'checkbox')
@@ -51,13 +58,16 @@
                                     <span>{{ AdminUi::columnLabel($field) }}</span>
                                 @else
                                     <span>{{ AdminUi::columnLabel($field) }}</span>
-                                    @if(!empty($options))
+                                    @if($hasRelationOptions)
                                         <select name="{{ $field }}">
                                             <option value="">Select {{ strtolower(AdminUi::columnLabel($field)) }}</option>
                                             @foreach($options as $optionValue => $optionLabel)
                                                 <option value="{{ $optionValue }}" {{ (string) $currentValue === (string) $optionValue ? 'selected' : '' }}>{{ $optionLabel }}</option>
                                             @endforeach
                                         </select>
+                                        @if(empty($options) && $createModule)
+                                            <small class="field-help">No {{ strtolower(AdminUi::columnLabel($field)) }} records found. <a href="{{ route('admin.module.create', $createModule) }}">Create one first</a>.</small>
+                                        @endif
                                     @elseif(is_array($type))
                                         <select name="{{ $field }}">
                                             @foreach($type as $option)

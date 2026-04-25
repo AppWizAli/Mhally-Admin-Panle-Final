@@ -86,6 +86,17 @@ small {
     color: var(--muted);
 }
 
+.field-help {
+    display: block;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.field-help a {
+    color: var(--primary);
+    font-weight: 700;
+}
+
 code {
     display: block;
     padding: 10px 12px;
