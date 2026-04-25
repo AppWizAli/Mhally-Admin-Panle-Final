@@ -1,0 +1,18 @@
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # Block direct access to Laravel application files if the whole project is
+    # uploaded into public_html on shared hosting.
+    RewriteRule ^(?:app|bootstrap|config|database|resources|routes|tests)(?:/|$) - [F,L]
+    RewriteRule ^storage/(?:app|framework|logs)(?:/|$) - [F,L]
+    RewriteRule ^\.(?!well-known(?:/|$)) - [F,L,NC]
+    RewriteRule ^(?:composer\.(?:json|lock)|package(?:-lock)?\.json|webpack\.mix\.js|artisan|server\.php|phpunit\.xml)(?:/|$) - [F,L,NC]
+
+    # Route every public request through Laravel's public directory.
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

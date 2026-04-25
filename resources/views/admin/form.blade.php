@@ -43,6 +43,7 @@
                             @php
                                 $currentValue = old($field, data_get($item, $field));
                                 $inputType = is_array($type) ? 'select' : $type;
+                                $options = $fieldOptions[$field] ?? [];
                             @endphp
                             <label class="{{ $inputType === 'checkbox' ? 'check-row' : '' }}">
                                 @if($inputType === 'checkbox')
@@ -50,7 +51,14 @@
                                     <span>{{ AdminUi::columnLabel($field) }}</span>
                                 @else
                                     <span>{{ AdminUi::columnLabel($field) }}</span>
-                                    @if(is_array($type))
+                                    @if(!empty($options))
+                                        <select name="{{ $field }}">
+                                            <option value="">Select {{ strtolower(AdminUi::columnLabel($field)) }}</option>
+                                            @foreach($options as $optionValue => $optionLabel)
+                                                <option value="{{ $optionValue }}" {{ (string) $currentValue === (string) $optionValue ? 'selected' : '' }}>{{ $optionLabel }}</option>
+                                            @endforeach
+                                        </select>
+                                    @elseif(is_array($type))
                                         <select name="{{ $field }}">
                                             @foreach($type as $option)
                                                 <option value="{{ $option }}" {{ (string) $currentValue === (string) $option ? 'selected' : '' }}>{{ ucfirst($option) }}</option>

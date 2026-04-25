@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Throwable;
 
 class AdminController extends Controller
 {
@@ -142,8 +146,9 @@ class AdminController extends Controller
     {
         $config = $this->module($module);
         $item = null;
+        $fieldOptions = $this->fieldOptions($module);
 
-        return view('admin.form', compact('module', 'config', 'item'));
+        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions'));
     }
 
     public function edit(string $module, int $id)
@@ -151,14 +156,18 @@ class AdminController extends Controller
         $config = $this->module($module);
         $item = DB::table($config['table'])->where('id', $id)->first();
         abort_if(!$item, 404);
+        $fieldOptions = $this->fieldOptions($module);
 
-        return view('admin.form', compact('module', 'config', 'item'));
+        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions'));
     }
 
     public function store(string $module, Request $request)
     {
         $config = $this->module($module);
+        $this->validateModuleRequest($module, $config, $request);
+
         $data = $this->payload($config, $request);
+        $data = $this->applyModuleDefaults($module, $config['table'], $data);
         if (Schema::hasColumn($config['table'], 'created_at')) {
             $data['created_at'] = now();
         }
@@ -166,7 +175,11 @@ class AdminController extends Controller
             $data['updated_at'] = now();
         }
 
-        DB::table($config['table'])->insert($data);
+        try {
+            DB::table($config['table'])->insert($data);
+        } catch (Throwable $e) {
+            return $this->saveFailed($module, $config, $data, $e);
+        }
 
         return redirect()->route('admin.module.index', $module)->with('status', $config['title'] . ' created.');
     }
@@ -174,12 +187,18 @@ class AdminController extends Controller
     public function update(string $module, int $id, Request $request)
     {
         $config = $this->module($module);
+        $this->validateModuleRequest($module, $config, $request, $id);
+
         $data = $this->payload($config, $request);
         if (Schema::hasColumn($config['table'], 'updated_at')) {
             $data['updated_at'] = now();
         }
 
-        DB::table($config['table'])->where('id', $id)->update($data);
+        try {
+            DB::table($config['table'])->where('id', $id)->update($data);
+        } catch (Throwable $e) {
+            return $this->saveFailed($module, $config, $data, $e);
+        }
 
         return redirect()->route('admin.module.index', $module)->with('status', $config['title'] . ' updated.');
     }
@@ -296,8 +315,13 @@ class AdminController extends Controller
     private function payload(array $config, Request $request): array
     {
         $data = [];
+        $table = $config['table'];
 
         foreach ($config['fields'] as $field => $type) {
+            if (!Schema::hasColumn($table, $field)) {
+                continue;
+            }
+
             if ($type === 'checkbox') {
                 $data[$field] = $request->boolean($field) ? 1 : 0;
                 continue;
@@ -309,14 +333,241 @@ class AdminController extends Controller
                 continue;
             }
 
-            $data[$field] = $request->input($field);
+            if ($type === 'datetime') {
+                $value = $request->input($field);
+                $data[$field] = $value ? str_replace('T', ' ', $value) . (strlen($value) === 16 ? ':00' : '') : null;
+                continue;
+            }
+
+            $value = $request->input($field);
+            $data[$field] = is_string($value) ? trim($value) : $value;
         }
 
-        if (isset($data['name']) && empty($data['slug'])) {
-            $data['slug'] = Str::slug($data['name']);
+        if (isset($data['name']) && Schema::hasColumn($table, 'slug') && empty($data['slug'])) {
+            $data['slug'] = $this->uniqueSlug($table, Str::slug($data['name']));
         }
 
         return $data;
+    }
+
+    private function validateModuleRequest(string $module, array $config, Request $request, ?int $id = null): void
+    {
+        $table = $config['table'];
+        $rules = [];
+
+        $add = function (string $field, array $fieldRules) use (&$rules, $table): void {
+            if (Schema::hasColumn($table, $field)) {
+                $rules[$field] = $fieldRules;
+            }
+        };
+
+        match ($module) {
+            'buyers' => [
+                $add('store_name', ['required', 'string', 'max:150']),
+                $add('buyer_name', ['required', 'string', 'max:120']),
+                $add('email', ['required', 'email', 'max:180', Rule::unique($table, 'email')->ignore($id)]),
+                $add('phone', ['nullable', 'string', 'max:40']),
+                $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'inactive', 'blocked'])]),
+            ],
+            'suppliers' => [
+                $add('business_name', ['required', 'string', 'max:160']),
+                $add('owner_name', ['required', 'string', 'max:120']),
+                $add('email', ['required', 'email', 'max:180', Rule::unique($table, 'email')->ignore($id)]),
+                $add('phone', ['nullable', 'string', 'max:40']),
+                $add('status', ['required', Rule::in($config['fields']['status'] ?? ['pending', 'active', 'suspended'])]),
+            ],
+            'products' => [
+                $add('catalog_product_id', ['required', 'integer', Rule::exists('catalog_products', 'id')]),
+                $add('supplier_id', ['nullable', 'integer', Rule::exists('suppliers', 'id')]),
+                $add('price', ['nullable', 'numeric', 'min:0']),
+                $add('stock_quantity', ['nullable', 'integer', 'min:0']),
+                $add('min_order_qty', ['nullable', 'integer', 'min:1']),
+                $add('min_order_amount', ['nullable', 'numeric', 'min:0']),
+                $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'draft', 'archived'])]),
+            ],
+            'offers' => [
+                $add('title', ['required', 'string', 'max:190']),
+                $add('supplier_id', ['nullable', 'integer', Rule::exists('suppliers', 'id')]),
+                $add('supplier_product_id', ['nullable', 'integer', Rule::exists('supplier_products', 'id')]),
+                $add('catalog_product_id', ['nullable', 'integer', Rule::exists('catalog_products', 'id')]),
+                $add('offer_price', ['nullable', 'numeric', 'min:0']),
+                $add('maximum_quantity', ['nullable', 'integer', 'min:1']),
+                $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'draft', 'expired'])]),
+            ],
+            'catalog_products' => [
+                $add('category_id', ['required', 'integer', Rule::exists('categories', 'id')]),
+                $add('name', ['required', 'string', 'max:180']),
+                $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'draft', 'archived'])]),
+            ],
+            'categories' => [
+                $add('name', ['required', 'string', 'max:120']),
+                $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'draft', 'archived'])]),
+            ],
+            'notifications' => [
+                $add('title', ['required', 'string', 'max:190']),
+                $add('message', ['required', 'string']),
+                $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'draft', 'archived'])]),
+            ],
+            default => null,
+        };
+
+        $request->validate($rules, [
+            'catalog_product_id.required' => 'Select a catalog product before saving.',
+            'catalog_product_id.exists' => 'The selected catalog product does not exist.',
+            'supplier_id.exists' => 'The selected supplier does not exist.',
+            'supplier_product_id.exists' => 'The selected supplier product does not exist.',
+            'category_id.required' => 'Select a category before saving.',
+            'category_id.exists' => 'The selected category does not exist.',
+            'email.unique' => 'This email already exists.',
+        ]);
+    }
+
+    private function applyModuleDefaults(string $module, string $table, array $data): array
+    {
+        if ($module === 'buyers') {
+            $this->setDefault($table, $data, 'password_hash', fn () => Hash::make(Str::random(32)));
+            $this->setDefault($table, $data, 'member_since', fn () => now()->toDateString());
+            $this->setDefault($table, $data, 'preferred_language', 'en');
+            $this->setDefault($table, $data, 'status', 'active');
+        }
+
+        if ($module === 'suppliers') {
+            $this->setDefault($table, $data, 'password_hash', fn () => Hash::make(Str::random(32)));
+            $this->setDefault($table, $data, 'minimum_order_quantity', 1);
+            $this->setDefault($table, $data, 'minimum_order_amount', 0);
+            $this->setDefault($table, $data, 'status', 'pending');
+            $this->setDefault($table, $data, 'is_verified', 0);
+        }
+
+        if ($module === 'products') {
+            $this->setDefault($table, $data, 'sku', fn () => 'SKU-' . strtoupper(Str::random(8)));
+            $this->setDefault($table, $data, 'price', 0);
+            $this->setDefault($table, $data, 'stock_quantity', 0);
+            $this->setDefault($table, $data, 'min_order_qty', 1);
+            $this->setDefault($table, $data, 'min_order_amount', 0);
+            $this->setDefault($table, $data, 'status', 'active');
+            $this->setDefault($table, $data, 'is_featured', 0);
+        }
+
+        if ($module === 'offers') {
+            $this->setDefault($table, $data, 'status', 'active');
+        }
+
+        if ($module === 'categories') {
+            $this->setDefault($table, $data, 'accent_color', '#2f6bff');
+            $this->setDefault($table, $data, 'sort_order', 0);
+            $this->setDefault($table, $data, 'status', 'active');
+        }
+
+        if ($module === 'catalog_products') {
+            $this->setDefault($table, $data, 'status', 'active');
+        }
+
+        return $data;
+    }
+
+    private function setDefault(string $table, array &$data, string $field, $value): void
+    {
+        if (!Schema::hasColumn($table, $field)) {
+            return;
+        }
+
+        if (array_key_exists($field, $data) && $data[$field] !== null && $data[$field] !== '') {
+            return;
+        }
+
+        $data[$field] = is_callable($value) ? $value() : $value;
+    }
+
+    private function uniqueSlug(string $table, string $slug): string
+    {
+        $baseSlug = $slug ?: Str::random(8);
+        $candidate = $baseSlug;
+        $counter = 2;
+
+        while (DB::table($table)->where('slug', $candidate)->exists()) {
+            $candidate = $baseSlug . '-' . $counter++;
+        }
+
+        return $candidate;
+    }
+
+    private function saveFailed(string $module, array $config, array $data, Throwable $e)
+    {
+        $errorId = (string) Str::uuid();
+
+        Log::error('Admin record save failed', [
+            'error_id' => $errorId,
+            'module' => $module,
+            'table' => $config['table'],
+            'data_keys' => array_keys($data),
+            'exception' => get_class($e),
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+        ]);
+
+        return back()
+            ->withInput()
+            ->withErrors(['save' => $this->saveErrorMessage($config['title'], $e, $errorId)]);
+    }
+
+    private function saveErrorMessage(string $title, Throwable $e, string $errorId): string
+    {
+        $message = $e instanceof QueryException ? $e->getMessage() : '';
+
+        if (str_contains($message, 'Duplicate entry')) {
+            return $title . ' could not be saved because one value already exists. Error ID: ' . $errorId;
+        }
+
+        if (str_contains($message, 'foreign key constraint') || str_contains($message, 'Cannot add or update a child row')) {
+            return $title . ' could not be saved because a selected related record was not found. Error ID: ' . $errorId;
+        }
+
+        return $title . ' could not be saved because of a server/database issue. Error ID: ' . $errorId;
+    }
+
+    private function fieldOptions(string $module): array
+    {
+        $options = [];
+
+        if (in_array($module, ['catalog_products'], true) && Schema::hasTable('categories')) {
+            $options['category_id'] = DB::table('categories')
+                ->orderBy('name')
+                ->pluck('name', 'id')
+                ->all();
+        }
+
+        if (in_array($module, ['products', 'offers'], true) && Schema::hasTable('catalog_products')) {
+            $options['catalog_product_id'] = DB::table('catalog_products')
+                ->orderBy('name')
+                ->pluck('name', 'id')
+                ->all();
+        }
+
+        if (in_array($module, ['products', 'offers'], true) && Schema::hasTable('suppliers')) {
+            $options['supplier_id'] = DB::table('suppliers')
+                ->orderBy('business_name')
+                ->pluck('business_name', 'id')
+                ->all();
+        }
+
+        if ($module === 'offers' && Schema::hasTable('supplier_products')) {
+            $options['supplier_product_id'] = DB::table('supplier_products as sp')
+                ->leftJoin('catalog_products as cp', 'cp.id', '=', 'sp.catalog_product_id')
+                ->leftJoin('suppliers as s', 's.id', '=', 'sp.supplier_id')
+                ->select('sp.id', 'cp.name as product_name', 's.business_name', 'sp.price')
+                ->orderBy('cp.name')
+                ->get()
+                ->mapWithKeys(function ($product) {
+                    $label = trim(($product->product_name ?: 'Product #' . $product->id) . ' - ' . ($product->business_name ?: 'No supplier'), ' -');
+
+                    return [$product->id => $label . ' (PKR ' . number_format((float) $product->price, 2) . ')'];
+                })
+                ->all();
+        }
+
+        return $options;
     }
 
     private function settingsIndex(array $config)
