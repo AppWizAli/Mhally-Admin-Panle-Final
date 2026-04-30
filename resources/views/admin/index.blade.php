@@ -43,6 +43,9 @@
                 @endif
                 <button class="ghost-button" type="submit">{{ $statusOptions || $module === 'offers' ? 'Filters' : 'Search' }}</button>
             </form>
+            @if($module === 'products')
+                <a class="ghost-button" href="{{ route('admin.products.bulk') }}">Bulk Upload</a>
+            @endif
             @if($canCreate)
                 <a class="primary-button" href="{{ route('admin.module.create', $module) }}">Add {{ AdminUi::singularTitle($module) }}</a>
             @endif

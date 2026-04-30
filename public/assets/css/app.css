@@ -29,7 +29,7 @@ body {
     padding: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: "Manrope", "Segoe UI", sans-serif;
+    font-family: "IBM Plex Sans Arabic", "Segoe UI", sans-serif;
 }
 
 a {
@@ -171,7 +171,7 @@ code {
 .brand strong {
     display: block;
     color: var(--primary);
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Lama Sans", "IBM Plex Sans Arabic", sans-serif;
     font-size: 16px;
     line-height: 1.2;
 }
@@ -238,7 +238,7 @@ code {
 .topbar h1 {
     margin: 0;
     font-size: 20px;
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Lama Sans", "IBM Plex Sans Arabic", sans-serif;
 }
 
 .eyebrow {
@@ -391,13 +391,13 @@ code {
 .page-block__header h3 {
     margin: 0;
     font-size: 18px;
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Lama Sans", "IBM Plex Sans Arabic", sans-serif;
 }
 
 .panel__header h3 {
     margin: 0;
     font-size: 18px;
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Lama Sans", "IBM Plex Sans Arabic", sans-serif;
 }
 
 .page-block__header p {
@@ -480,7 +480,7 @@ code {
 .summary-card strong {
     display: block;
     font-size: 18px;
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Lama Sans", "IBM Plex Sans Arabic", sans-serif;
 }
 
 .summary-card span {
@@ -944,7 +944,7 @@ input[type="file"]::file-selector-button:hover {
     margin: 18px 0 14px;
     font-size: clamp(36px, 5vw, 56px);
     line-height: 1.08;
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Lama Sans", "IBM Plex Sans Arabic", sans-serif;
 }
 
 .login-showcase p,
@@ -975,7 +975,23 @@ input[type="file"]::file-selector-button:hover {
 
 .login-card__header h2 {
     margin: 10px 0 0;
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Lama Sans", "IBM Plex Sans Arabic", sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.brand strong,
+.summary-card strong,
+.tab-stat strong,
+.table-title strong,
+.login-showcase h1,
+.login-card__header h2 {
+    font-family: "Lama Sans", "IBM Plex Sans Arabic", sans-serif;
+    font-weight: 500;
 }
 
 .login-card__header p {

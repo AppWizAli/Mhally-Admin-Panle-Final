@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Support\AdminUi;
+use App\Support\ProductBulkImporter;
+use App\Support\PushNotifications;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -180,9 +182,13 @@ class AdminController extends Controller
         }
 
         try {
-            DB::table($config['table'])->insert($data);
+            $insertedId = DB::table($config['table'])->insertGetId($data);
         } catch (Throwable $e) {
             return $this->saveFailed($module, $config, $data, $e);
+        }
+
+        if ($module === 'notifications' && ($data['status'] ?? '') === 'active') {
+            PushNotifications::dispatchAppNotification((int) $insertedId);
         }
 
         return redirect()->route('admin.module.index', $module)->with('status', $config['title'] . ' created.');
@@ -206,7 +212,72 @@ class AdminController extends Controller
             return $this->saveFailed($module, $config, $data, $e);
         }
 
+        if ($module === 'notifications' && ($data['status'] ?? '') === 'active') {
+            PushNotifications::dispatchAppNotification($id);
+        }
+
         return redirect()->route('admin.module.index', $module)->with('status', $config['title'] . ' updated.');
+    }
+
+    public function bulkProductsForm()
+    {
+        $config = $this->module('products');
+        $suppliers = DB::table('suppliers')
+            ->orderBy('business_name')
+            ->pluck('business_name', 'id')
+            ->all();
+        $summary = session('bulk_summary');
+
+        return view('admin.product-bulk', compact('config', 'suppliers', 'summary'));
+    }
+
+    public function bulkProductsUpload(Request $request)
+    {
+        $request->validate([
+            'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')],
+            'inventory_file' => ['required', 'file', 'max:10240'],
+        ], [
+            'supplier_id.required' => 'Select the supplier this inventory belongs to.',
+            'inventory_file.required' => 'Choose a CSV or XLSX inventory file.',
+        ]);
+
+        $file = $request->file('inventory_file');
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, ['csv', 'txt', 'xlsx'], true)) {
+            return back()->withInput()->withErrors(['inventory_file' => 'Upload a CSV or XLSX file.']);
+        }
+
+        try {
+            $summary = ProductBulkImporter::importFile($file->getRealPath(), (int) $request->input('supplier_id'));
+        } catch (Throwable $exception) {
+            return back()->withInput()->withErrors(['inventory_file' => $exception->getMessage()]);
+        }
+
+        $message = $summary['error_count'] > 0
+            ? 'Bulk upload finished with row errors. Review the report below.'
+            : 'Bulk upload completed and products are active.';
+
+        return redirect()
+            ->route('admin.products.bulk')
+            ->with('status', $message)
+            ->with('bulk_summary', $summary);
+    }
+
+    public function bulkProductsTemplate()
+    {
+        $lines = [
+            ProductBulkImporter::templateHeaders(),
+            ['Pepsi 1.5L', 'Beverages', '120', '100', '2', '50'],
+        ];
+        $csv = '';
+        foreach ($lines as $line) {
+            $csv .= implode(',', array_map(fn ($value) => '"' . str_replace('"', '""', $value) . '"', $line)) . "\n";
+        }
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="muhalli-product-upload-template.csv"',
+        ]);
     }
 
     public function destroy(string $module, int $id)

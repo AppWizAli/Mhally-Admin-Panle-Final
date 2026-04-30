@@ -14,6 +14,9 @@ Route::middleware('admin.auth')->group(function () {
     Route::post('/admin/settings/password', [AdminController::class, 'savePassword'])->name('admin.settings.password');
     Route::post('/admin/settings/app', [AdminController::class, 'saveSettings'])->name('admin.settings.app');
     Route::post('/admin/chats/{id}/message', [AdminController::class, 'sendChatMessage'])->name('admin.chats.message');
+    Route::get('/admin/products/bulk-upload', [AdminController::class, 'bulkProductsForm'])->name('admin.products.bulk');
+    Route::post('/admin/products/bulk-upload', [AdminController::class, 'bulkProductsUpload'])->name('admin.products.bulk.upload');
+    Route::get('/admin/products/bulk-template', [AdminController::class, 'bulkProductsTemplate'])->name('admin.products.bulk.template');
     Route::get('/admin/{module}', [AdminController::class, 'index'])->name('admin.module.index');
     Route::get('/admin/{module}/create', [AdminController::class, 'create'])->name('admin.module.create');
     Route::post('/admin/{module}', [AdminController::class, 'store'])->name('admin.module.store');

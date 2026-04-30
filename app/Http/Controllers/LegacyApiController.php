@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ProductBulkImporter;
+use App\Support\PushNotifications;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -248,6 +250,12 @@ class LegacyApiController extends Controller
                         (float) $this->value($request, 'delivery_fee', 0)
                     );
                     $orderId = $this->createOrderWithItems($orderPayload);
+                    PushNotifications::notifySupplier(
+                        (int) $orderPayload['supplier_id'],
+                        'New order received',
+                        'A buyer placed order ' . $orderPayload['order_number'] . '.',
+                        ['navigate_to' => 'supplier_orders', 'link_type' => 'order', 'link_value' => (string) $orderId]
+                    );
                     return $this->ok($this->findOrder($orderId), 'Order created.', 201);
 
                 case 'supplier/dashboard':
@@ -306,10 +314,25 @@ class LegacyApiController extends Controller
                     $identity = $this->requireIdentity($request, 'supplier');
                     return $this->saveSupplierProduct($request, (int) $identity['user_id']);
 
+                case 'supplier/products/bulk-upload':
+                    $this->requireMethod($request, 'POST');
+                    $identity = $this->requireIdentity($request, 'supplier');
+                    return $this->bulkUploadSupplierProducts($request, (int) $identity['user_id']);
+
                 case 'supplier/offers/create':
                     $this->requireMethod($request, 'POST');
                     $identity = $this->requireIdentity($request, 'supplier');
                     return $this->saveSupplierOffer($request, (int) $identity['user_id']);
+
+                case 'supplier/notifications/register-device':
+                    $this->requireMethod($request, 'POST');
+                    $identity = $this->requireIdentity($request, 'supplier');
+                    $this->registerSupplierDeviceToken(
+                        (int) $identity['user_id'],
+                        (string) $this->value($request, 'firebase_token', ''),
+                        (string) $this->value($request, 'platform', 'android')
+                    );
+                    return $this->ok(['registered' => true], 'Supplier device token saved.');
 
                 case 'supplier/orders':
                     $identity = $this->requireIdentity($request, 'supplier');
@@ -593,6 +616,17 @@ class LegacyApiController extends Controller
         }
 
         $savedId = $this->persist('supplier_products', $payload, $listingId ?: null);
+        $offerPrice = (float) $this->value($request, 'offer_price', 0);
+        if ($offerPrice > 0) {
+            $this->saveOfferForListing(
+                $supplierId,
+                $savedId,
+                $offerPrice,
+                (int) $this->value($request, 'maximum_quantity', 0),
+                (string) $this->value($request, 'title', ''),
+                (string) $this->value($request, 'description', 'Supplier special offer')
+            );
+        }
         return $this->ok($this->findListing($savedId), 'Supplier product saved.', $listingId ? 200 : 201);
     }
 
@@ -637,6 +671,70 @@ class LegacyApiController extends Controller
         return $this->ok($this->findOffer($offerId), 'Offer saved.', $existing ? 200 : 201);
     }
 
+    private function saveOfferForListing(int $supplierId, int $listingId, float $offerPrice, int $maximumQuantity = 0, string $title = '', string $description = ''): void
+    {
+        $listing = $this->findListing($listingId);
+        if (!$listing || (int) $listing['supplier_id'] !== $supplierId || $offerPrice <= 0) {
+            return;
+        }
+
+        $existing = $this->row(
+            'SELECT * FROM offers WHERE supplier_id = :supplier_id AND supplier_product_id = :supplier_product_id AND status IN ("active", "draft") ORDER BY id DESC LIMIT 1',
+            ['supplier_id' => $supplierId, 'supplier_product_id' => $listingId]
+        );
+
+        $this->persist('offers', [
+            'title' => $title ?: (string) $listing['catalog_name'],
+            'description' => $description ?: 'Supplier special offer',
+            'badge_label' => 'Special Offer',
+            'discount_label' => number_format($offerPrice, 2) . ' PKR',
+            'image_url' => (string) ($listing['image_url'] ?? ''),
+            'supplier_id' => $supplierId,
+            'supplier_product_id' => $listingId,
+            'catalog_product_id' => (int) $listing['catalog_product_id'],
+            'offer_price' => $offerPrice,
+            'maximum_quantity' => $maximumQuantity > 0 ? $maximumQuantity : null,
+            'city' => (string) ($listing['supplier_city'] ?? ''),
+            'status' => 'active',
+            'starts_at' => null,
+            'ends_at' => null,
+            'created_at' => (string) ($existing['created_at'] ?? now()),
+            'updated_at' => now(),
+        ], $existing ? (int) $existing['id'] : null);
+    }
+
+    private function bulkUploadSupplierProducts(Request $request, int $supplierId)
+    {
+        $fileName = basename((string) $this->value($request, 'file_name', 'products.csv'));
+        $encoded = (string) $this->value($request, 'file_data_base64', '');
+        if ($encoded === '') {
+            $this->fail('file_data_base64 is required.');
+        }
+
+        $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        if (!in_array($extension, ['csv', 'txt', 'xlsx'], true)) {
+            $this->fail('Upload a CSV or XLSX file.');
+        }
+
+        $bytes = base64_decode($encoded, true);
+        if ($bytes === false || $bytes === '') {
+            $this->fail('Uploaded file data is invalid.');
+        }
+
+        $basePath = tempnam(sys_get_temp_dir(), 'muhalli-bulk-');
+        $path = $basePath . '.' . $extension;
+        file_put_contents($path, $bytes);
+
+        try {
+            $summary = ProductBulkImporter::importFile($path, $supplierId);
+        } finally {
+            @unlink($path);
+            @unlink($basePath);
+        }
+
+        return $this->ok($summary, $summary['error_count'] > 0 ? 'Bulk upload completed with row errors.' : 'Bulk upload completed.');
+    }
+
     private function updateSupplierOrderStatus(Request $request, int $supplierId)
     {
         $order = $this->findOrder((int) $this->value($request, 'order_id', 0));
@@ -651,6 +749,13 @@ class LegacyApiController extends Controller
             'notes' => (string) $this->value($request, 'notes', $order['notes']),
             'updated_at' => now(),
         ], (int) $order['id']);
+
+        PushNotifications::notifyBuyer(
+            (int) $order['buyer_id'],
+            'Order status updated',
+            'Order ' . $order['order_number'] . ' is now ' . (string) $this->value($request, 'status', $order['status']) . '.',
+            ['navigate_to' => 'orders', 'link_type' => 'order', 'link_value' => (string) $order['id']]
+        );
 
         return $this->ok($this->findOrder((int) $order['id']), 'Order status updated.');
     }
@@ -693,6 +798,22 @@ class LegacyApiController extends Controller
             DB::table('chat_threads')->where('id', $threadId)->update($updates);
         }
 
+        if ($senderType === 'buyer') {
+            PushNotifications::notifySupplier(
+                (int) $thread['supplier_id'],
+                'New buyer message',
+                $senderName . ': ' . Str::limit($body, 80),
+                ['navigate_to' => 'supplier_messages', 'link_type' => 'chat', 'link_value' => (string) $threadId]
+            );
+        } else {
+            PushNotifications::notifyBuyer(
+                (int) $thread['buyer_id'],
+                'New supplier message',
+                $senderName . ': ' . Str::limit($body, 80),
+                ['navigate_to' => 'chats', 'link_type' => 'chat', 'link_value' => (string) $threadId]
+            );
+        }
+
         return $this->ok($this->findThread($threadId), 'Message sent.');
     }
 
@@ -707,6 +828,31 @@ class LegacyApiController extends Controller
         );
     }
 
+    private function activeOfferJoinSql(string $listingAlias = 'sp', string $offerAlias = 'ao'): string
+    {
+        return ' LEFT JOIN offers ' . $offerAlias . ' ON ' . $offerAlias . '.id = (
+                    SELECT o2.id
+                    FROM offers o2
+                    WHERE o2.supplier_id = ' . $listingAlias . '.supplier_id
+                      AND (o2.supplier_product_id = ' . $listingAlias . '.id
+                           OR (o2.supplier_product_id IS NULL AND o2.catalog_product_id = ' . $listingAlias . '.catalog_product_id))
+                      AND o2.status = "active"
+                      AND (o2.starts_at IS NULL OR o2.starts_at <= NOW())
+                      AND (o2.ends_at IS NULL OR o2.ends_at >= NOW())
+                    ORDER BY COALESCE(o2.starts_at, o2.created_at) DESC, o2.id DESC
+                    LIMIT 1
+                ) ';
+    }
+
+    private function effectivePriceSql(string $listingAlias = 'sp', string $offerAlias = 'ao'): string
+    {
+        return 'CASE WHEN ' . $offerAlias . '.id IS NOT NULL
+                       AND ' . $offerAlias . '.offer_price IS NOT NULL
+                       AND ' . $offerAlias . '.offer_price > 0
+                    THEN ' . $offerAlias . '.offer_price
+                    ELSE ' . $listingAlias . '.price END';
+    }
+
     private function allSuppliers(array $filters): array
     {
         $search = (string) ($filters['search'] ?? '');
@@ -719,12 +865,15 @@ class LegacyApiController extends Controller
             default => 's.is_verified DESC, FIELD(s.status, "pending", "active", "suspended"), s.business_name ASC',
         };
 
+        $offerJoin = $this->activeOfferJoinSql('sp', 'so');
+        $effectivePrice = $this->effectivePriceSql('sp', 'so');
+
         return $this->rows(
             'SELECT s.*,
-                    (SELECT COUNT(*) FROM supplier_products sp WHERE sp.supplier_id = s.id) AS product_count,
+                    (SELECT COUNT(*) FROM supplier_products sp WHERE sp.supplier_id = s.id AND sp.status = "active" AND sp.stock_quantity > 0) AS product_count,
                     (SELECT COUNT(*) FROM orders o WHERE o.supplier_id = s.id) AS order_count,
                     (SELECT COALESCE(SUM(CASE WHEN o.status != "cancelled" THEN o.total_amount ELSE 0 END), 0) FROM orders o WHERE o.supplier_id = s.id) AS revenue_total,
-                    (SELECT MIN(sp.price) FROM supplier_products sp WHERE sp.supplier_id = s.id AND sp.status = "active") AS lowest_price
+                    (SELECT MIN(' . $effectivePrice . ') FROM supplier_products sp ' . $offerJoin . ' WHERE sp.supplier_id = s.id AND sp.status = "active" AND sp.stock_quantity > 0) AS lowest_price
              FROM suppliers s
              WHERE (:search = ""
                 OR s.business_name LIKE :like
@@ -736,6 +885,8 @@ class LegacyApiController extends Controller
                     JOIN catalog_products cp2 ON cp2.id = sp2.catalog_product_id
                     LEFT JOIN categories c2 ON c2.id = cp2.category_id
                     WHERE sp2.supplier_id = s.id
+                      AND sp2.status = "active"
+                      AND sp2.stock_quantity > 0
                       AND (cp2.name LIKE :like OR cp2.packaging LIKE :like OR c2.name LIKE :like)
                 ))
                AND (:status = "" OR s.status = :status)
@@ -753,9 +904,11 @@ class LegacyApiController extends Controller
         $categoryId = (int) ($filters['category_id'] ?? 0);
         $city = trim((string) ($filters['city'] ?? ''));
         $sort = strtolower(trim((string) ($filters['sort'] ?? 'default')));
+        $offerJoin = $this->activeOfferJoinSql('sp', 'ao');
+        $effectivePrice = $this->effectivePriceSql('sp', 'ao');
         $orderBy = match ($sort) {
-            'cheapest' => 'sp.price ASC, s.minimum_order_amount ASC, cp.name ASC',
-            'low_min_order' => 's.minimum_order_amount ASC, sp.price ASC, cp.name ASC',
+            'cheapest' => 'effective_price ASC, s.minimum_order_amount ASC, cp.name ASC',
+            'low_min_order' => 's.minimum_order_amount ASC, effective_price ASC, cp.name ASC',
             default => 'sp.is_featured DESC, sp.created_at DESC, sp.id DESC',
         };
 
@@ -763,13 +916,20 @@ class LegacyApiController extends Controller
             'SELECT sp.*, cp.name AS catalog_name, cp.emoji, cp.packaging, cp.unit_type, cp.description, cp.image_url,
                     c.name AS category_name, s.business_name AS supplier_name, s.city AS supplier_city,
                     s.minimum_order_amount AS supplier_minimum_order_amount,
-                    s.minimum_order_quantity AS supplier_minimum_order_quantity
+                    s.minimum_order_quantity AS supplier_minimum_order_quantity,
+                    ao.id AS active_offer_id,
+                    ao.offer_price,
+                    ao.maximum_quantity,
+                    ' . $effectivePrice . ' AS effective_price
              FROM supplier_products sp
              JOIN catalog_products cp ON cp.id = sp.catalog_product_id
              LEFT JOIN categories c ON c.id = cp.category_id
              LEFT JOIN suppliers s ON s.id = sp.supplier_id
+             ' . $offerJoin . '
              WHERE (:search = "" OR cp.name LIKE :like OR cp.packaging LIKE :like OR s.business_name LIKE :like OR c.name LIKE :like OR s.city LIKE :like)
                AND (:status = "" OR sp.status = :status)
+               AND (:status != "active" OR sp.stock_quantity > 0)
+               AND (:status != "active" OR s.status = "active")
                AND (:supplier_id = 0 OR sp.supplier_id = :supplier_id)
                AND (:category_id = 0 OR cp.category_id = :category_id)
                AND (:city = "" OR s.city = :city)
@@ -798,7 +958,7 @@ class LegacyApiController extends Controller
             'featured_categories' => $this->rows('SELECT id, name, icon, accent_color, description FROM categories WHERE status = "active" ORDER BY sort_order ASC, name ASC LIMIT 8'),
             'featured_suppliers' => $this->rows(
                 'SELECT id, business_name, owner_name, city, minimum_order_amount, minimum_order_quantity, delivery_time, is_verified, status,
-                        (SELECT MIN(sp.price) FROM supplier_products sp WHERE sp.supplier_id = suppliers.id AND sp.status = "active") AS lowest_price
+                        (SELECT MIN(' . $this->effectivePriceSql('sp', 'so') . ') FROM supplier_products sp ' . $this->activeOfferJoinSql('sp', 'so') . ' WHERE sp.supplier_id = suppliers.id AND sp.status = "active" AND sp.stock_quantity > 0) AS lowest_price
                  FROM suppliers
                  WHERE status = "active" AND (:city = "" OR city = :city)
                  ORDER BY is_verified DESC, business_name ASC
@@ -808,12 +968,15 @@ class LegacyApiController extends Controller
             'featured_products' => $this->rows(
                 'SELECT sp.id, cp.name, cp.emoji, cp.packaging, cp.unit_type, cp.description, cp.image_url,
                         sp.price, sp.stock_quantity, sp.delivery_time, s.business_name, c.name AS category_name,
-                        s.minimum_order_amount AS supplier_minimum_order_amount, s.city AS supplier_city
+                        s.minimum_order_amount AS supplier_minimum_order_amount, s.city AS supplier_city,
+                        ao.id AS active_offer_id, ao.offer_price, ao.maximum_quantity,
+                        ' . $this->effectivePriceSql('sp', 'ao') . ' AS effective_price
                  FROM supplier_products sp
                  JOIN catalog_products cp ON cp.id = sp.catalog_product_id
                  LEFT JOIN suppliers s ON s.id = sp.supplier_id
                  LEFT JOIN categories c ON c.id = cp.category_id
-                 WHERE sp.status = "active" AND (:city = "" OR s.city = :city)
+                 ' . $this->activeOfferJoinSql('sp', 'ao') . '
+                 WHERE sp.status = "active" AND sp.stock_quantity > 0 AND s.status = "active" AND (:city = "" OR s.city = :city)
                  ORDER BY sp.is_featured DESC, sp.created_at DESC
                  LIMIT 10',
                 ['city' => $city]
@@ -826,13 +989,19 @@ class LegacyApiController extends Controller
     private function activeOffersPayload(string $city = ''): array
     {
         return $this->rows(
-            'SELECT o.*, s.business_name AS supplier_name, cp.name AS product_name
+            'SELECT o.*, s.business_name AS supplier_name, cp.name AS product_name,
+                    sp.price AS original_price,
+                    sp.stock_quantity,
+                    sp.id AS listing_id
              FROM offers o
              LEFT JOIN suppliers s ON s.id = o.supplier_id
              LEFT JOIN catalog_products cp ON cp.id = o.catalog_product_id
+             LEFT JOIN supplier_products sp ON (sp.id = o.supplier_product_id OR (sp.supplier_id = o.supplier_id AND sp.catalog_product_id = o.catalog_product_id))
              WHERE o.status = "active"
                AND (o.starts_at IS NULL OR o.starts_at <= NOW())
                AND (o.ends_at IS NULL OR o.ends_at >= NOW())
+               AND (sp.id IS NULL OR (sp.status = "active" AND sp.stock_quantity > 0))
+               AND (s.id IS NULL OR s.status = "active")
                AND (:city = "" OR o.city IS NULL OR o.city = "" OR o.city = :city)
              ORDER BY COALESCE(o.starts_at, o.created_at) DESC, o.id DESC
              LIMIT 12',
@@ -918,17 +1087,14 @@ class LegacyApiController extends Controller
     {
         return $this->rows(
             'SELECT sp.*, cp.name, cp.packaging, cp.unit_type, cp.emoji, cp.image_url, c.name AS category_name,
-                    EXISTS (
-                        SELECT 1 FROM offers o
-                        WHERE o.supplier_id = sp.supplier_id
-                          AND (o.supplier_product_id = sp.id OR o.catalog_product_id = sp.catalog_product_id)
-                          AND o.status = "active"
-                          AND (o.starts_at IS NULL OR o.starts_at <= NOW())
-                          AND (o.ends_at IS NULL OR o.ends_at >= NOW())
-                    ) AS is_on_offer
+                    ao.id AS active_offer_id,
+                    ao.offer_price,
+                    ao.maximum_quantity,
+                    CASE WHEN ao.id IS NULL THEN 0 ELSE 1 END AS is_on_offer
              FROM supplier_products sp
              JOIN catalog_products cp ON cp.id = sp.catalog_product_id
              LEFT JOIN categories c ON c.id = cp.category_id
+             ' . $this->activeOfferJoinSql('sp', 'ao') . '
              WHERE sp.supplier_id = :supplier_id
              ORDER BY cp.name ASC',
             ['supplier_id' => $supplierId]
@@ -1125,14 +1291,18 @@ class LegacyApiController extends Controller
             if (!$listing || (int) $listing['supplier_id'] !== $supplierId) {
                 $this->fail('Invalid supplier product in order items.');
             }
-            $lineTotal = (float) $listing['price'] * $quantity;
+            if ((int) ($listing['stock_quantity'] ?? 0) < $quantity) {
+                $this->fail($listing['catalog_name'] . ' does not have enough stock for this order.');
+            }
+            $pricing = $this->hybridListingPrice($listing, $quantity);
+            $lineTotal = $pricing['line_total'];
             $subtotal += $lineTotal;
             $prepared[] = [
                 'supplier_product_id' => $listingId,
                 'product_name' => $listing['catalog_name'],
                 'unit_label' => $listing['unit_type'],
                 'quantity' => $quantity,
-                'unit_price' => (float) $listing['price'],
+                'unit_price' => $pricing['display_unit_price'],
                 'line_total' => $lineTotal,
             ];
         }
@@ -1149,6 +1319,55 @@ class LegacyApiController extends Controller
             'payment_status' => 'pending',
             'items' => $prepared,
         ];
+    }
+
+    private function hybridListingPrice(array $listing, int $quantity): array
+    {
+        $originalPrice = (float) $listing['price'];
+        $offer = $this->activeOfferForListing($listing);
+        $offerPrice = $offer ? (float) ($offer['offer_price'] ?? 0) : 0.0;
+        $maxOfferQuantity = $offer ? (int) ($offer['maximum_quantity'] ?? 0) : 0;
+
+        if ($offerPrice <= 0 || $offerPrice >= $originalPrice) {
+            return [
+                'line_total' => $originalPrice * $quantity,
+                'display_unit_price' => $originalPrice,
+                'offer_quantity' => 0,
+                'regular_quantity' => $quantity,
+            ];
+        }
+
+        $offerQuantity = $maxOfferQuantity > 0 ? min($quantity, $maxOfferQuantity) : $quantity;
+        $regularQuantity = max(0, $quantity - $offerQuantity);
+        $lineTotal = ($offerQuantity * $offerPrice) + ($regularQuantity * $originalPrice);
+
+        return [
+            'line_total' => $lineTotal,
+            'display_unit_price' => $quantity > 0 ? $lineTotal / $quantity : $offerPrice,
+            'offer_quantity' => $offerQuantity,
+            'regular_quantity' => $regularQuantity,
+        ];
+    }
+
+    private function activeOfferForListing(array $listing): ?array
+    {
+        return $this->row(
+            'SELECT *
+             FROM offers o
+             WHERE o.supplier_id = :supplier_id
+               AND (o.supplier_product_id = :listing_id
+                    OR (o.supplier_product_id IS NULL AND o.catalog_product_id = :catalog_product_id))
+               AND o.status = "active"
+               AND (o.starts_at IS NULL OR o.starts_at <= NOW())
+               AND (o.ends_at IS NULL OR o.ends_at >= NOW())
+             ORDER BY COALESCE(o.starts_at, o.created_at) DESC, o.id DESC
+             LIMIT 1',
+            [
+                'supplier_id' => (int) $listing['supplier_id'],
+                'listing_id' => (int) $listing['id'],
+                'catalog_product_id' => (int) $listing['catalog_product_id'],
+            ]
+        );
     }
 
     private function createOrderWithItems(array $payload): int
@@ -1198,6 +1417,25 @@ class LegacyApiController extends Controller
             ->first();
         $this->persist('buyer_devices', [
             'buyer_id' => $buyerId,
+            'firebase_token' => $firebaseToken,
+            'platform' => $platform,
+            'created_at' => $existing->created_at ?? now(),
+            'updated_at' => now(),
+        ], $existing ? (int) $existing->id : null);
+    }
+
+    private function registerSupplierDeviceToken(int $supplierId, string $firebaseToken, string $platform = 'android'): void
+    {
+        $firebaseToken = trim($firebaseToken);
+        if ($firebaseToken === '') {
+            throw new RuntimeException('Firebase token is required.');
+        }
+        $existing = DB::table('supplier_devices')
+            ->where('supplier_id', $supplierId)
+            ->where('firebase_token', $firebaseToken)
+            ->first();
+        $this->persist('supplier_devices', [
+            'supplier_id' => $supplierId,
             'firebase_token' => $firebaseToken,
             'platform' => $platform,
             'created_at' => $existing->created_at ?? now(),
