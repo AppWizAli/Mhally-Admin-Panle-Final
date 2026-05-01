@@ -445,6 +445,62 @@ class AdminController extends Controller
         return back()->with('status', 'Settings saved.');
     }
 
+    public function saveCommissionSettings(Request $request)
+    {
+        $payload = $request->validate([
+            'commission_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
+            'commission_apply_scope' => ['required', Rule::in(['new_only', 'all_orders'])],
+        ]);
+
+        $percentage = round((float) $payload['commission_percentage'], 2);
+        $scope = (string) $payload['commission_apply_scope'];
+
+        $storedValue = rtrim(rtrim(number_format($percentage, 2, '.', ''), '0'), '.');
+        $existingCommissionSetting = DB::table('settings')
+            ->where('setting_key', 'admin_commission_percentage')
+            ->exists();
+
+        if ($existingCommissionSetting) {
+            DB::table('settings')
+                ->where('setting_key', 'admin_commission_percentage')
+                ->update([
+                    'setting_value' => $storedValue,
+                    'setting_group' => 'system',
+                    'label' => 'Admin commission percentage per completed order',
+                    'updated_at' => now(),
+                ]);
+        } else {
+            DB::table('settings')->insert([
+                'setting_key' => 'admin_commission_percentage',
+                'setting_value' => $storedValue,
+                'setting_group' => 'system',
+                'label' => 'Admin commission percentage per completed order',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        if (
+            $scope === 'all_orders'
+            && Schema::hasTable('orders')
+            && Schema::hasColumn('orders', 'admin_commission_percentage')
+            && Schema::hasColumn('orders', 'admin_commission_amount')
+        ) {
+            $rate = number_format($percentage / 100, 6, '.', '');
+            DB::table('orders')->update([
+                'admin_commission_percentage' => $percentage,
+                'admin_commission_amount' => DB::raw('ROUND(COALESCE(total_amount, 0) * ' . $rate . ', 2)'),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $message = $scope === 'all_orders'
+            ? 'Commission percentage saved and applied to existing and future orders.'
+            : 'Commission percentage saved for future orders.';
+
+        return back()->with('status', $message);
+    }
+
     public function sendChatMessage(int $id, Request $request)
     {
         $thread = DB::table('chat_threads')->where('id', $id)->first();
@@ -856,7 +912,14 @@ class AdminController extends Controller
         $adminId = (int) data_get(session('admin_user', []), 'id', 0);
         $admin = $adminId > 0 ? DB::table('admins')->where('id', $adminId)->first() : null;
         $publicSettings = DB::table('settings')->where('setting_group', 'public')->orderBy('id')->get();
-        $systemSettings = DB::table('settings')->where('setting_group', 'system')->orderBy('id')->get();
+        $systemSettings = DB::table('settings')
+            ->where('setting_group', 'system')
+            ->where('setting_key', '!=', 'admin_commission_percentage')
+            ->orderBy('id')
+            ->get();
+        $commissionPercentage = (string) (DB::table('settings')
+            ->where('setting_key', 'admin_commission_percentage')
+            ->value('setting_value') ?? '0');
         $multilineSettingKeys = [
             'buyer_min_order_message',
             'supplier_onboarding_message',
@@ -866,7 +929,7 @@ class AdminController extends Controller
         ];
         $booleanSettingKeys = ['referral_enabled'];
 
-        return view('admin.settings', compact('config', 'admin', 'publicSettings', 'systemSettings', 'multilineSettingKeys', 'booleanSettingKeys'));
+        return view('admin.settings', compact('config', 'admin', 'publicSettings', 'systemSettings', 'multilineSettingKeys', 'booleanSettingKeys', 'commissionPercentage'));
     }
 
     private function referralIndex(array $config)
@@ -1341,6 +1404,9 @@ class AdminController extends Controller
                 'o.total_amount',
                 'o.status',
             ];
+            if (Schema::hasColumn('orders', 'admin_commission_percentage')) {
+                $orderColumns[] = 'o.admin_commission_percentage';
+            }
             if ($hasCommissionAmount) {
                 $orderColumns[] = 'o.admin_commission_amount';
             }
@@ -1363,6 +1429,9 @@ class AdminController extends Controller
                 ->get();
 
             $orderBlockColumns = ['order_number', 'store_name', 'buyer_name', 'order_date', 'item_count', 'total_amount'];
+            if (Schema::hasColumn('orders', 'admin_commission_percentage')) {
+                $orderBlockColumns[] = 'admin_commission_percentage';
+            }
             if ($hasCommissionAmount) {
                 $orderBlockColumns[] = 'admin_commission_amount';
             }

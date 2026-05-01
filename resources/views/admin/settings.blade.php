@@ -87,6 +87,39 @@
             <section class="panel">
                 <div class="panel__header">
                     <div>
+                        <span class="eyebrow">Commission settings</span>
+                        <h3>Admin order commission</h3>
+                    </div>
+                </div>
+                <form method="post" action="{{ route('admin.settings.commission') }}" class="stack-form">
+                    @csrf
+                    <label>
+                        <span>Commission percentage</span>
+                        <input
+                            type="number"
+                            name="commission_percentage"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value="{{ old('commission_percentage', $commissionPercentage) }}"
+                            required
+                        >
+                    </label>
+                    <label>
+                        <span>Apply this percentage to</span>
+                        <select name="commission_apply_scope">
+                            <option value="new_only" {{ old('commission_apply_scope', 'new_only') === 'new_only' ? 'selected' : '' }}>New orders only</option>
+                            <option value="all_orders" {{ old('commission_apply_scope') === 'all_orders' ? 'selected' : '' }}>All previous and new orders</option>
+                        </select>
+                    </label>
+                    <p class="field-help">Use <strong>New orders only</strong> to keep old orders unchanged. Use <strong>All previous and new orders</strong> to recalculate stored commission percentage and commission amount on existing orders too.</p>
+                    <button class="primary-button full-width" type="submit">Save commission settings</button>
+                </form>
+            </section>
+
+            <section class="panel">
+                <div class="panel__header">
+                    <div>
                         <span class="eyebrow">Public app settings</span>
                         <h3>Values exposed to buyer and supplier apps</h3>
                     </div>
