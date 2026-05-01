@@ -46,6 +46,9 @@
             @if($module === 'products')
                 <a class="ghost-button" href="{{ route('admin.products.bulk') }}">Bulk Upload</a>
             @endif
+            @if($module === 'catalog_products')
+                <a class="ghost-button" href="{{ route('admin.catalog-products.bulk') }}">Bulk Catalog Upload</a>
+            @endif
             @if($canCreate)
                 <a class="primary-button" href="{{ route('admin.module.create', $module) }}">Add {{ AdminUi::singularTitle($module) }}</a>
             @endif

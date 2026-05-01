@@ -134,14 +134,19 @@ class CreateMuhalliMarketplaceTables extends Migration
                 $table->string('order_number', 60)->unique();
                 $table->unsignedInteger('buyer_id');
                 $table->unsignedInteger('supplier_id');
-                $table->string('status', 30)->default('processing');
+                $table->string('status', 30)->default('pending');
+                $table->string('status_reason', 255)->nullable();
                 $table->string('payment_status', 30)->default('pending');
                 $table->decimal('subtotal', 12, 2)->default(0);
                 $table->decimal('delivery_fee', 12, 2)->default(0);
                 $table->decimal('total_amount', 12, 2)->default(0);
+                $table->decimal('admin_commission_percentage', 5, 2)->default(0);
+                $table->decimal('admin_commission_amount', 12, 2)->default(0);
                 $table->text('notes')->nullable();
                 $table->date('order_date');
                 $table->date('delivery_date')->nullable();
+                $table->dateTime('seller_confirmed_at')->nullable();
+                $table->dateTime('completed_at')->nullable();
                 $table->dateTime('created_at');
                 $table->dateTime('updated_at');
                 $table->foreign('buyer_id')->references('id')->on('buyers')->cascadeOnDelete();
@@ -382,6 +387,7 @@ class CreateMuhalliMarketplaceTables extends Migration
             'support_whatsapp' => ['+92 300 7000000', 'public', 'Support WhatsApp number'],
             'support_whatsapp_message' => ['Hello Muhalli support, I need help with my buyer account.', 'public', 'Support WhatsApp default message'],
             'map_default_city' => ['Karachi', 'public', 'Default map city'],
+            'default_currency' => ['PKR', 'public', 'Default currency shown in buyer and supplier apps'],
             'referral_enabled' => ['1', 'public', 'Referral program enabled'],
             'referral_reward_amount' => ['20', 'public', 'Referrer reward amount'],
             'referral_referee_reward_amount' => ['10', 'public', 'Referred buyer reward amount'],
@@ -392,6 +398,7 @@ class CreateMuhalliMarketplaceTables extends Migration
             'otp_sender_id' => ['Muhalli', 'system', 'OTP sender ID'],
             'otp_expiry_minutes' => ['10', 'system', 'OTP expiry minutes'],
             'otp_message_template' => ['Your Muhalli verification code is {{CODE}}. It expires in {{MINUTES}} minutes.', 'system', 'OTP message template'],
+            'admin_commission_percentage' => ['0', 'system', 'Admin commission percentage per completed order'],
         ];
 
         foreach ($settings as $key => [$value, $group, $label]) {

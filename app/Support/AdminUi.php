@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class AdminUi
 {
@@ -100,7 +101,16 @@ class AdminUi
 
     public static function money($value, string $currency = 'PKR'): string
     {
-        return $currency . ' ' . number_format((float) $value, 2);
+        $symbol = $currency;
+        if ($currency === 'PKR') {
+            try {
+                $symbol = (string) (DB::table('settings')->where('setting_key', 'default_currency')->value('setting_value') ?: 'PKR');
+            } catch (\Throwable $exception) {
+                $symbol = 'PKR';
+            }
+        }
+
+        return number_format((float) $value, 2) . ' ' . $symbol;
     }
 
     public static function shortDate($value): string
@@ -172,6 +182,15 @@ class AdminUi
             'store_name', 'buyer_name' => str_contains($column, 'store') ? 'Store' : 'Buyer',
             'item_count' => 'Products',
             'total_amount', 'minimum_order_amount' => 'Amount',
+            'total_sales' => 'Total Sales',
+            'delivered_sales' => 'Cleared Sales',
+            'pending_sales' => 'Being Cleared Sales',
+            'cleared_commission' => 'Cleared Commission',
+            'pending_commission' => 'Being Cleared Commission',
+            'admin_commission_amount' => 'Admin Commission',
+            'admin_commission_percentage' => 'Commission %',
+            'status_reason' => 'Status Reason',
+            'commission_status' => 'Commission Status',
             'order_date' => 'Order Date',
             'delivery_date' => 'Delivery Date',
             'last_message_at' => 'Updated',
@@ -183,7 +202,15 @@ class AdminUi
 
     public static function formatTableValue(string $column, $value): string
     {
-        if (str_contains($column, 'amount') || str_contains($column, 'price') || str_contains($column, 'spend') || str_contains($column, 'reward')) {
+        if ($column === 'commission_status') {
+            return self::displayValue($value);
+        }
+
+        if (str_contains($column, 'percentage')) {
+            return rtrim(rtrim(number_format((float) $value, 2), '0'), '.') . '%';
+        }
+
+        if (str_contains($column, 'amount') || str_contains($column, 'price') || str_contains($column, 'spend') || str_contains($column, 'reward') || str_contains($column, 'commission') || str_contains($column, 'sales')) {
             return self::money($value);
         }
 

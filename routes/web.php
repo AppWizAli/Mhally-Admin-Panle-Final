@@ -17,6 +17,9 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('/admin/products/bulk-upload', [AdminController::class, 'bulkProductsForm'])->name('admin.products.bulk');
     Route::post('/admin/products/bulk-upload', [AdminController::class, 'bulkProductsUpload'])->name('admin.products.bulk.upload');
     Route::get('/admin/products/bulk-template', [AdminController::class, 'bulkProductsTemplate'])->name('admin.products.bulk.template');
+    Route::get('/admin/catalog-products/bulk-upload', [AdminController::class, 'bulkCatalogProductsForm'])->name('admin.catalog-products.bulk');
+    Route::post('/admin/catalog-products/bulk-upload', [AdminController::class, 'bulkCatalogProductsUpload'])->name('admin.catalog-products.bulk.upload');
+    Route::get('/admin/catalog-products/bulk-template', [AdminController::class, 'bulkCatalogProductsTemplate'])->name('admin.catalog-products.bulk.template');
     Route::get('/admin/{module}', [AdminController::class, 'index'])->name('admin.module.index');
     Route::get('/admin/{module}/create', [AdminController::class, 'create'])->name('admin.module.create');
     Route::post('/admin/{module}', [AdminController::class, 'store'])->name('admin.module.store');

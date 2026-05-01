@@ -32,8 +32,36 @@
         <article class="summary-card">
             <div class="summary-card__icon purple"></div>
             <div>
+                <strong>{{ AdminUi::money((float) ($counts['sales_total'] ?? 0)) }}</strong>
+                <span>Total Marketplace Sales</span>
+            </div>
+        </article>
+        <article class="summary-card">
+            <div class="summary-card__icon purple"></div>
+            <div>
                 <strong>{{ AdminUi::money((float) ($counts['revenue'] ?? 0)) }}</strong>
-                <span>Revenue</span>
+                <span>Cleared Seller Sales</span>
+            </div>
+        </article>
+        <article class="summary-card">
+            <div class="summary-card__icon amber"></div>
+            <div>
+                <strong>{{ AdminUi::money((float) ($counts['pending_sales'] ?? 0)) }}</strong>
+                <span>Being Cleared Sales</span>
+            </div>
+        </article>
+        <article class="summary-card">
+            <div class="summary-card__icon green"></div>
+            <div>
+                <strong>{{ AdminUi::money((float) ($counts['commission'] ?? 0)) }}</strong>
+                <span>Cleared Admin Commission</span>
+            </div>
+        </article>
+        <article class="summary-card">
+            <div class="summary-card__icon amber"></div>
+            <div>
+                <strong>{{ AdminUi::money((float) ($counts['pending_commission'] ?? 0)) }}</strong>
+                <span>Being Cleared Commission</span>
             </div>
         </article>
     </section>
@@ -55,6 +83,8 @@
                         <th>Customer</th>
                         <th>Supplier</th>
                         <th>Amount</th>
+                        <th>Commission</th>
+                        <th>Commission Status</th>
                         <th>Status</th>
                         <th>Date</th>
                     </tr>
@@ -62,16 +92,18 @@
                     <tbody>
                     @forelse($recentOrders as $order)
                         <tr>
-                            <td>{{ $order->order_number }}</td>
+                            <td><a class="inline-link" href="{{ route('admin.module.show', ['orders', $order->id]) }}">{{ $order->order_number }}</a></td>
                             <td>{{ $order->store_name }}</td>
                             <td>{{ $order->business_name }}</td>
                             <td>{{ AdminUi::money($order->total_amount) }}</td>
+                            <td>{{ AdminUi::money($order->admin_commission_amount ?? 0) }}</td>
+                            <td>{{ $order->commission_status }}</td>
                             <td><span class="status-chip {{ AdminUi::statusBadgeClass($order->status) }}">{{ ucfirst((string) $order->status) }}</span></td>
                             <td>{{ AdminUi::shortDate($order->order_date) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="subtle">No orders yet.</td>
+                            <td colspan="8" class="subtle">No orders yet.</td>
                         </tr>
                     @endforelse
                     </tbody>

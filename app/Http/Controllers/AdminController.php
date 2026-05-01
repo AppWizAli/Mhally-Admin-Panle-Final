@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\AdminUi;
+use App\Support\CatalogProductBulkImporter;
 use App\Support\ProductBulkImporter;
 use App\Support\PushNotifications;
 use Illuminate\Database\QueryException;
@@ -55,29 +56,59 @@ class AdminController extends Controller
 
     public function dashboard()
     {
+        $openOrderStatuses = ['pending', 'processing', 'shipped'];
+        $hasCommissionAmount = Schema::hasColumn('orders', 'admin_commission_amount');
+
         $counts = [
             'buyers' => $this->count('buyers', 'active'),
             'suppliers' => $this->count('suppliers', 'active'),
             'products' => $this->count('supplier_products', 'active'),
             'orders' => DB::table('orders')->count(),
-            'revenue' => (float) DB::table('orders')
+            'sales_total' => (float) DB::table('orders')
                 ->where('status', '!=', 'cancelled')
                 ->sum('total_amount'),
+            'revenue' => (float) DB::table('orders')
+                ->where('status', 'delivered')
+                ->sum('total_amount'),
+            'pending_sales' => (float) DB::table('orders')
+                ->whereIn('status', $openOrderStatuses)
+                ->sum('total_amount'),
+            'commission' => $hasCommissionAmount
+                ? (float) DB::table('orders')->where('status', 'delivered')->sum('admin_commission_amount')
+                : 0.0,
+            'pending_commission' => $hasCommissionAmount
+                ? (float) DB::table('orders')->whereIn('status', $openOrderStatuses)->sum('admin_commission_amount')
+                : 0.0,
+            'commission_total' => $hasCommissionAmount
+                ? (float) DB::table('orders')->where('status', '!=', 'cancelled')->sum('admin_commission_amount')
+                : 0.0,
             'pending_suppliers' => $this->count('suppliers', 'pending'),
         ];
+
+        $recentOrderColumns = [
+            'o.id',
+            'o.order_number',
+            'o.status',
+            'o.total_amount',
+            'o.order_date',
+            'b.store_name',
+            's.business_name',
+        ];
+        if (Schema::hasColumn('orders', 'status_reason')) {
+            $recentOrderColumns[] = 'o.status_reason';
+        }
+        if (Schema::hasColumn('orders', 'admin_commission_amount')) {
+            $recentOrderColumns[] = 'o.admin_commission_amount';
+        }
+        if (Schema::hasColumn('orders', 'admin_commission_percentage')) {
+            $recentOrderColumns[] = 'o.admin_commission_percentage';
+        }
 
         $recentOrders = DB::table('orders as o')
             ->join('buyers as b', 'b.id', '=', 'o.buyer_id')
             ->join('suppliers as s', 's.id', '=', 'o.supplier_id')
-            ->select([
-                'o.id',
-                'o.order_number',
-                'o.status',
-                'o.total_amount',
-                'o.order_date',
-                'b.store_name',
-                's.business_name',
-            ])
+            ->select($recentOrderColumns)
+            ->selectRaw('CASE WHEN o.status = "delivered" THEN "Cleared" WHEN o.status = "cancelled" THEN "Cancelled" ELSE "Being cleared" END AS commission_status')
             ->orderByDesc('o.order_date')
             ->orderByDesc('o.id')
             ->limit(6)
@@ -277,6 +308,61 @@ class AdminController extends Controller
         return response($csv, 200, [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="muhalli-product-upload-template.csv"',
+        ]);
+    }
+
+    public function bulkCatalogProductsForm()
+    {
+        $config = $this->module('catalog_products');
+        $summary = session('bulk_summary');
+
+        return view('admin.catalog-product-bulk', compact('config', 'summary'));
+    }
+
+    public function bulkCatalogProductsUpload(Request $request)
+    {
+        $request->validate([
+            'catalog_file' => ['required', 'file', 'max:10240'],
+        ], [
+            'catalog_file.required' => 'Choose a CSV or XLSX catalog file.',
+        ]);
+
+        $file = $request->file('catalog_file');
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, ['csv', 'txt', 'xlsx'], true)) {
+            return back()->withInput()->withErrors(['catalog_file' => 'Upload a CSV or XLSX file.']);
+        }
+
+        try {
+            $summary = CatalogProductBulkImporter::importFile($file->getRealPath());
+        } catch (Throwable $exception) {
+            return back()->withInput()->withErrors(['catalog_file' => $exception->getMessage()]);
+        }
+
+        $message = $summary['error_count'] > 0
+            ? 'Catalog bulk upload finished with row errors. Review the report below.'
+            : 'Catalog bulk upload completed and products are active.';
+
+        return redirect()
+            ->route('admin.catalog-products.bulk')
+            ->with('status', $message)
+            ->with('bulk_summary', $summary);
+    }
+
+    public function bulkCatalogProductsTemplate()
+    {
+        $lines = [
+            CatalogProductBulkImporter::templateHeaders(),
+            ['Pepsi 1.5L', 'Beverages', '', 'Carbonated drink bottle', '1.5L bottle', 'unit', '', 'active'],
+        ];
+        $csv = '';
+        foreach ($lines as $line) {
+            $csv .= implode(',', array_map(fn ($value) => '"' . str_replace('"', '""', $value) . '"', $line)) . "\n";
+        }
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="muhalli-catalog-product-template.csv"',
         ]);
     }
 
@@ -757,7 +843,7 @@ class AdminController extends Controller
                 ->mapWithKeys(function ($product) {
                     $label = trim(($product->product_name ?: 'Product #' . $product->id) . ' - ' . ($product->business_name ?: 'No supplier'), ' -');
 
-                    return [$product->id => $label . ' (PKR ' . number_format((float) $product->price, 2) . ')'];
+                    return [$product->id => $label . ' (' . AdminUi::money((float) $product->price) . ')'];
                 })
                 ->all();
         }
@@ -902,7 +988,7 @@ class AdminController extends Controller
             )
             ->selectSub(
                 DB::table('orders as o')
-                    ->selectRaw('COALESCE(SUM(CASE WHEN o.status != "cancelled" THEN o.total_amount ELSE 0 END), 0)')
+                    ->selectRaw('COALESCE(SUM(CASE WHEN o.status = "delivered" THEN o.total_amount ELSE 0 END), 0)')
                     ->whereColumn('o.supplier_id', 's.id'),
                 'revenue_total'
             )
@@ -1033,7 +1119,8 @@ class AdminController extends Controller
                     ->selectRaw('COUNT(*)')
                     ->whereColumn('oi.order_id', 'o.id'),
                 'item_count'
-            );
+            )
+            ->selectRaw('CASE WHEN o.status = "delivered" THEN "Cleared" WHEN o.status = "cancelled" THEN "Cancelled" ELSE "Being cleared" END AS commission_status');
 
         $this->applySearch($query, ['o.order_number', 'b.store_name', 's.business_name'], $search);
         if ($status !== '') {
@@ -1218,6 +1305,105 @@ class AdminController extends Controller
         $blocks = [];
 
         if ($module === 'suppliers') {
+            $hasCommissionAmount = Schema::hasColumn('orders', 'admin_commission_amount');
+            $hasStatusReason = Schema::hasColumn('orders', 'status_reason');
+            $clearedCommissionSql = $hasCommissionAmount
+                ? 'COALESCE(SUM(CASE WHEN status = "delivered" THEN admin_commission_amount ELSE 0 END), 0)'
+                : '0';
+            $pendingCommissionSql = $hasCommissionAmount
+                ? 'COALESCE(SUM(CASE WHEN status IN ("pending", "processing", "shipped") THEN admin_commission_amount ELSE 0 END), 0)'
+                : '0';
+
+            $activity = DB::table('orders')
+                ->selectRaw('COUNT(*) AS total_orders')
+                ->selectRaw('COALESCE(SUM(CASE WHEN status = "delivered" THEN 1 ELSE 0 END), 0) AS delivered_orders')
+                ->selectRaw('COALESCE(SUM(CASE WHEN status IN ("pending", "processing", "shipped") THEN 1 ELSE 0 END), 0) AS open_orders')
+                ->selectRaw('COALESCE(SUM(CASE WHEN status != "cancelled" THEN total_amount ELSE 0 END), 0) AS total_sales')
+                ->selectRaw('COALESCE(SUM(CASE WHEN status = "delivered" THEN total_amount ELSE 0 END), 0) AS delivered_sales')
+                ->selectRaw('COALESCE(SUM(CASE WHEN status IN ("pending", "processing", "shipped") THEN total_amount ELSE 0 END), 0) AS pending_sales')
+                ->selectRaw($clearedCommissionSql . ' AS cleared_commission')
+                ->selectRaw($pendingCommissionSql . ' AS pending_commission')
+                ->where('supplier_id', $item->id)
+                ->first();
+
+            $blocks[] = [
+                'title' => 'Seller Activity Summary',
+                'subtitle' => 'Completed sales are cleared; pending, processing, and shipped orders are being cleared.',
+                'columns' => ['total_orders', 'delivered_orders', 'open_orders', 'total_sales', 'delivered_sales', 'pending_sales', 'cleared_commission', 'pending_commission'],
+                'rows' => collect([$activity]),
+            ];
+
+            $orderColumns = [
+                'o.order_number',
+                'b.store_name',
+                'b.buyer_name',
+                'o.order_date',
+                'o.total_amount',
+                'o.status',
+            ];
+            if ($hasCommissionAmount) {
+                $orderColumns[] = 'o.admin_commission_amount';
+            }
+            if ($hasStatusReason) {
+                $orderColumns[] = 'o.status_reason';
+            }
+            $orders = DB::table('orders as o')
+                ->join('buyers as b', 'b.id', '=', 'o.buyer_id')
+                ->select($orderColumns)
+                ->selectSub(
+                    DB::table('order_items as oi')
+                        ->selectRaw('COUNT(*)')
+                        ->whereColumn('oi.order_id', 'o.id'),
+                    'item_count'
+                )
+                ->where('o.supplier_id', $item->id)
+                ->orderByDesc('o.order_date')
+                ->orderByDesc('o.id')
+                ->limit(25)
+                ->get();
+
+            $orderBlockColumns = ['order_number', 'store_name', 'buyer_name', 'order_date', 'item_count', 'total_amount'];
+            if ($hasCommissionAmount) {
+                $orderBlockColumns[] = 'admin_commission_amount';
+            }
+            $orderBlockColumns[] = 'status';
+            if ($hasStatusReason) {
+                $orderBlockColumns[] = 'status_reason';
+            }
+
+            $blocks[] = [
+                'title' => 'Seller Orders',
+                'subtitle' => 'Latest buyer orders for this seller, including order amount, commission, and current status.',
+                'columns' => $orderBlockColumns,
+                'rows' => $orders,
+            ];
+
+            $orderedProducts = DB::table('order_items as oi')
+                ->join('orders as o', 'o.id', '=', 'oi.order_id')
+                ->join('buyers as b', 'b.id', '=', 'o.buyer_id')
+                ->select([
+                    'o.order_number',
+                    'b.store_name',
+                    'oi.product_name',
+                    'oi.quantity',
+                    'oi.unit_price',
+                    'oi.line_total',
+                    'o.status',
+                    'o.order_date',
+                ])
+                ->where('o.supplier_id', $item->id)
+                ->orderByDesc('o.order_date')
+                ->orderByDesc('oi.id')
+                ->limit(50)
+                ->get();
+
+            $blocks[] = [
+                'title' => 'Ordered Products',
+                'subtitle' => 'Products buyers have ordered from this seller.',
+                'columns' => ['order_number', 'store_name', 'product_name', 'quantity', 'unit_price', 'line_total', 'status', 'order_date'],
+                'rows' => $orderedProducts,
+            ];
+
             $rows = DB::table('supplier_products as sp')
                 ->join('catalog_products as cp', 'cp.id', '=', 'sp.catalog_product_id')
                 ->leftJoin('categories as c', 'c.id', '=', 'cp.category_id')
@@ -1234,7 +1420,7 @@ class AdminController extends Controller
 
             $blocks[] = [
                 'title' => 'Supplier Products',
-                'subtitle' => $rows->count() . ' active linked listings.',
+                'subtitle' => $rows->count() . ' linked catalog listings.',
                 'columns' => ['product_name', 'category_name', 'price', 'stock_quantity', 'status'],
                 'rows' => $rows,
             ];
@@ -1264,6 +1450,32 @@ class AdminController extends Controller
         }
 
         if ($module === 'orders') {
+            $summary = collect([
+                (object) [
+                    'buyer' => $item->store_name ?? '',
+                    'supplier' => $item->business_name ?? '',
+                    'order_date' => $item->order_date ?? null,
+                    'status' => $item->status ?? '',
+                    'status_reason' => $item->status_reason ?? '',
+                    'subtotal' => $item->subtotal ?? 0,
+                    'delivery_fee' => $item->delivery_fee ?? 0,
+                    'total_amount' => $item->total_amount ?? 0,
+                    'admin_commission_percentage' => $item->admin_commission_percentage ?? 0,
+                    'admin_commission_amount' => $item->admin_commission_amount ?? 0,
+                    'commission_status' => match ((string) ($item->status ?? '')) {
+                        'delivered' => 'Cleared',
+                        'cancelled' => 'Cancelled',
+                        default => 'Being cleared',
+                    },
+                ],
+            ]);
+            $blocks[] = [
+                'title' => 'Order Financials',
+                'subtitle' => 'Buyer, seller, status, and admin commission details.',
+                'columns' => ['buyer', 'supplier', 'order_date', 'status', 'status_reason', 'subtotal', 'delivery_fee', 'total_amount', 'admin_commission_percentage', 'admin_commission_amount', 'commission_status'],
+                'rows' => $summary,
+            ];
+
             $rows = DB::table('order_items')
                 ->select(['product_name', 'unit_label', 'quantity', 'unit_price', 'line_total'])
                 ->where('order_id', $item->id)

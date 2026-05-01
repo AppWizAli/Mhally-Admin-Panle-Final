@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\CatalogProductBulkImporter;
 use App\Support\ProductBulkImporter;
 use App\Support\PushNotifications;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -9,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
@@ -221,6 +223,15 @@ class LegacyApiController extends Controller
                     $identity = $this->requireIdentity($request, 'buyer');
                     return $this->ok($this->buyerChatsPayload((int) $identity['user_id']));
 
+                case 'buyer/chats/start':
+                    $this->requireMethod($request, 'POST');
+                    $identity = $this->requireIdentity($request, 'buyer');
+                    $threadId = $this->ensureBuyerSupplierThread(
+                        (int) $identity['user_id'],
+                        (int) $this->value($request, 'supplier_id', 0)
+                    );
+                    return $this->ok($this->findThread($threadId), 'Chat ready.');
+
                 case 'buyer/chats/thread':
                     $identity = $this->requireIdentity($request, 'buyer');
                     $threadId = (int) $this->value($request, 'thread_id', 0);
@@ -303,6 +314,11 @@ class LegacyApiController extends Controller
 
                 case 'supplier/catalog':
                     return $this->ok($this->supplierCatalogPayload());
+
+                case 'supplier/catalog/bulk-upload':
+                    $this->requireMethod($request, 'POST');
+                    $this->requireIdentity($request, 'supplier');
+                    return $this->bulkUploadCatalogProducts($request);
 
                 case 'supplier/products':
                     $identity = $this->requireIdentity($request, 'supplier');
@@ -653,7 +669,7 @@ class LegacyApiController extends Controller
             'title' => (string) $this->value($request, 'title', $listing['catalog_name']),
             'description' => (string) $this->value($request, 'description', 'Supplier special offer'),
             'badge_label' => (string) $this->value($request, 'badge_label', 'Special Offer'),
-            'discount_label' => (string) $this->value($request, 'discount_label', number_format($offerPrice, 2) . ' PKR'),
+            'discount_label' => (string) $this->value($request, 'discount_label', $this->currencyAmountLabel($offerPrice)),
             'image_url' => (string) ($listing['image_url'] ?? ''),
             'supplier_id' => $supplierId,
             'supplier_product_id' => $listingId,
@@ -687,7 +703,7 @@ class LegacyApiController extends Controller
             'title' => $title ?: (string) $listing['catalog_name'],
             'description' => $description ?: 'Supplier special offer',
             'badge_label' => 'Special Offer',
-            'discount_label' => number_format($offerPrice, 2) . ' PKR',
+            'discount_label' => $this->currencyAmountLabel($offerPrice),
             'image_url' => (string) ($listing['image_url'] ?? ''),
             'supplier_id' => $supplierId,
             'supplier_product_id' => $listingId,
@@ -735,6 +751,38 @@ class LegacyApiController extends Controller
         return $this->ok($summary, $summary['error_count'] > 0 ? 'Bulk upload completed with row errors.' : 'Bulk upload completed.');
     }
 
+    private function bulkUploadCatalogProducts(Request $request)
+    {
+        $fileName = basename((string) $this->value($request, 'file_name', 'catalog-products.csv'));
+        $encoded = (string) $this->value($request, 'file_data_base64', '');
+        if ($encoded === '') {
+            $this->fail('file_data_base64 is required.');
+        }
+
+        $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        if (!in_array($extension, ['csv', 'txt', 'xlsx'], true)) {
+            $this->fail('Upload a CSV or XLSX file.');
+        }
+
+        $bytes = base64_decode($encoded, true);
+        if ($bytes === false || $bytes === '') {
+            $this->fail('Uploaded file data is invalid.');
+        }
+
+        $basePath = tempnam(sys_get_temp_dir(), 'muhalli-catalog-bulk-');
+        $path = $basePath . '.' . $extension;
+        file_put_contents($path, $bytes);
+
+        try {
+            $summary = CatalogProductBulkImporter::importFile($path);
+        } finally {
+            @unlink($path);
+            @unlink($basePath);
+        }
+
+        return $this->ok($summary, $summary['error_count'] > 0 ? 'Catalog bulk upload completed with row errors.' : 'Catalog bulk upload completed.');
+    }
+
     private function updateSupplierOrderStatus(Request $request, int $supplierId)
     {
         $order = $this->findOrder((int) $this->value($request, 'order_id', 0));
@@ -742,18 +790,40 @@ class LegacyApiController extends Controller
             $this->fail('Order not found.', 404);
         }
 
-        $this->persist('orders', [
-            'status' => (string) $this->value($request, 'status', $order['status']),
+        $nextStatus = (string) $this->value($request, 'status', $order['status']);
+        $statusReason = match ($nextStatus) {
+            'processing' => 'Supplier confirmed the order and started processing.',
+            'shipped' => 'Supplier marked the order as shipped.',
+            'delivered' => 'Order completed and seller revenue is now counted.',
+            'cancelled' => 'Order was cancelled before completion.',
+            default => 'Waiting for supplier confirmation.',
+        };
+
+        $updates = [
+            'status' => $nextStatus,
             'payment_status' => (string) $this->value($request, 'payment_status', $order['payment_status']),
             'delivery_date' => (string) $this->value($request, 'delivery_date', $order['delivery_date']) ?: null,
             'notes' => (string) $this->value($request, 'notes', $order['notes']),
             'updated_at' => now(),
-        ], (int) $order['id']);
+        ];
+
+        if (Schema::hasColumn('orders', 'status_reason')) {
+            $updates['status_reason'] = $statusReason;
+        }
+        if ($nextStatus === 'processing' && Schema::hasColumn('orders', 'seller_confirmed_at') && empty($order['seller_confirmed_at'])) {
+            $updates['seller_confirmed_at'] = now();
+        }
+        if ($nextStatus === 'delivered' && Schema::hasColumn('orders', 'completed_at')) {
+            $updates['completed_at'] = now();
+            $updates['payment_status'] = 'paid';
+        }
+
+        $this->persist('orders', $updates, (int) $order['id']);
 
         PushNotifications::notifyBuyer(
             (int) $order['buyer_id'],
             'Order status updated',
-            'Order ' . $order['order_number'] . ' is now ' . (string) $this->value($request, 'status', $order['status']) . '.',
+            'Order ' . $order['order_number'] . ' is now ' . $nextStatus . '.',
             ['navigate_to' => 'orders', 'link_type' => 'order', 'link_value' => (string) $order['id']]
         );
 
@@ -872,7 +942,7 @@ class LegacyApiController extends Controller
             'SELECT s.*,
                     (SELECT COUNT(*) FROM supplier_products sp WHERE sp.supplier_id = s.id AND sp.status = "active" AND sp.stock_quantity > 0) AS product_count,
                     (SELECT COUNT(*) FROM orders o WHERE o.supplier_id = s.id) AS order_count,
-                    (SELECT COALESCE(SUM(CASE WHEN o.status != "cancelled" THEN o.total_amount ELSE 0 END), 0) FROM orders o WHERE o.supplier_id = s.id) AS revenue_total,
+                    (SELECT COALESCE(SUM(CASE WHEN o.status = "delivered" THEN o.total_amount ELSE 0 END), 0) FROM orders o WHERE o.supplier_id = s.id) AS revenue_total,
                     (SELECT MIN(' . $effectivePrice . ') FROM supplier_products sp ' . $offerJoin . ' WHERE sp.supplier_id = s.id AND sp.status = "active" AND sp.stock_quantity > 0) AS lowest_price
              FROM suppliers s
              WHERE (:search = ""
@@ -1056,7 +1126,7 @@ class LegacyApiController extends Controller
                     SUM(CASE WHEN sp.stock_quantity <= 10 THEN 1 ELSE 0 END) AS low_stock_count,
                     COUNT(DISTINCT CASE WHEN o.status = "pending" THEN o.id END) AS pending_orders,
                     COUNT(DISTINCT CASE WHEN DATE(o.order_date) = CURDATE() THEN o.id END) AS today_orders,
-                    COALESCE(SUM(CASE WHEN o.status != "cancelled" AND DATE_FORMAT(o.order_date, "%Y-%m") = DATE_FORMAT(CURDATE(), "%Y-%m") THEN o.total_amount ELSE 0 END), 0) AS month_revenue
+                    COALESCE(SUM(CASE WHEN o.status = "delivered" AND DATE_FORMAT(o.order_date, "%Y-%m") = DATE_FORMAT(CURDATE(), "%Y-%m") THEN o.total_amount ELSE 0 END), 0) AS month_revenue
              FROM suppliers s
              LEFT JOIN supplier_products sp ON sp.supplier_id = s.id
              LEFT JOIN orders o ON o.supplier_id = s.id
@@ -1129,15 +1199,15 @@ class LegacyApiController extends Controller
     {
         return [
             'summary' => $this->row(
-                'SELECT COALESCE(SUM(CASE WHEN status != "cancelled" THEN total_amount ELSE 0 END), 0) AS all_time,
-                        COALESCE(SUM(CASE WHEN status != "cancelled" AND DATE_FORMAT(order_date, "%Y-%m") = DATE_FORMAT(CURDATE(), "%Y-%m") THEN total_amount ELSE 0 END), 0) AS this_month
+                'SELECT COALESCE(SUM(CASE WHEN status = "delivered" THEN total_amount ELSE 0 END), 0) AS all_time,
+                        COALESCE(SUM(CASE WHEN status = "delivered" AND DATE_FORMAT(order_date, "%Y-%m") = DATE_FORMAT(CURDATE(), "%Y-%m") THEN total_amount ELSE 0 END), 0) AS this_month
                  FROM orders WHERE supplier_id = :supplier_id',
                 ['supplier_id' => $supplierId]
             ),
             'transactions' => $this->rows(
                 'SELECT order_number, total_amount, order_date, status
                  FROM orders
-                 WHERE supplier_id = :supplier_id AND status != "cancelled"
+                 WHERE supplier_id = :supplier_id AND status = "delivered"
                  ORDER BY order_date DESC',
                 ['supplier_id' => $supplierId]
             ),
@@ -1250,6 +1320,10 @@ class LegacyApiController extends Controller
              ORDER BY oi.id ASC',
             ['order_id' => $id]
         );
+        $order['chat_thread_id'] = (int) DB::table('chat_threads')
+            ->where('buyer_id', (int) $order['buyer_id'])
+            ->where('supplier_id', (int) $order['supplier_id'])
+            ->value('id');
         return $order;
     }
 
@@ -1271,6 +1345,36 @@ class LegacyApiController extends Controller
             ['thread_id' => $id]
         );
         return $thread;
+    }
+
+    private function ensureBuyerSupplierThread(int $buyerId, int $supplierId): int
+    {
+        if ($buyerId <= 0 || $supplierId <= 0) {
+            $this->fail('Buyer and supplier are required.');
+        }
+        if (!DB::table('buyers')->where('id', $buyerId)->exists() || !DB::table('suppliers')->where('id', $supplierId)->exists()) {
+            $this->fail('Buyer or supplier not found.', 404);
+        }
+
+        $existing = DB::table('chat_threads')
+            ->where('buyer_id', $buyerId)
+            ->where('supplier_id', $supplierId)
+            ->first();
+        if ($existing) {
+            return (int) $existing->id;
+        }
+
+        return $this->persist('chat_threads', [
+            'buyer_id' => $buyerId,
+            'supplier_id' => $supplierId,
+            'subject' => 'Order chat',
+            'last_message' => '',
+            'last_message_at' => now(),
+            'buyer_unread_count' => 0,
+            'supplier_unread_count' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function orderPayloadFromItems(int $buyerId, int $supplierId, $items, string $notes, float $deliveryFee): array
@@ -1307,15 +1411,21 @@ class LegacyApiController extends Controller
             ];
         }
 
+        $commissionPercentage = max(0.0, (float) $this->settingValue('admin_commission_percentage', '0'));
+        $totalAmount = $subtotal + $deliveryFee;
+
         return [
             'order_number' => 'MW-' . now()->format('Ymd') . '-' . random_int(100, 999),
             'buyer_id' => $buyerId,
             'supplier_id' => $supplierId,
             'subtotal' => $subtotal,
             'delivery_fee' => $deliveryFee,
-            'total_amount' => $subtotal + $deliveryFee,
+            'total_amount' => $totalAmount,
+            'admin_commission_percentage' => $commissionPercentage,
+            'admin_commission_amount' => round($totalAmount * ($commissionPercentage / 100), 2),
             'notes' => $notes,
-            'status' => 'processing',
+            'status' => 'pending',
+            'status_reason' => 'Waiting for supplier confirmation.',
             'payment_status' => 'pending',
             'items' => $prepared,
         ];
@@ -1373,11 +1483,11 @@ class LegacyApiController extends Controller
     private function createOrderWithItems(array $payload): int
     {
         return DB::transaction(function () use ($payload) {
-            $orderId = $this->persist('orders', [
+            $orderData = [
                 'order_number' => $payload['order_number'],
                 'buyer_id' => $payload['buyer_id'],
                 'supplier_id' => $payload['supplier_id'],
-                'status' => $payload['status'] ?? 'processing',
+                'status' => $payload['status'] ?? 'pending',
                 'payment_status' => $payload['payment_status'] ?? 'pending',
                 'subtotal' => $payload['subtotal'],
                 'delivery_fee' => $payload['delivery_fee'],
@@ -1387,7 +1497,15 @@ class LegacyApiController extends Controller
                 'delivery_date' => $payload['delivery_date'] ?? null,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
+
+            foreach (['status_reason', 'admin_commission_percentage', 'admin_commission_amount'] as $column) {
+                if (Schema::hasColumn('orders', $column)) {
+                    $orderData[$column] = $payload[$column] ?? null;
+                }
+            }
+
+            $orderId = $this->persist('orders', $orderData);
 
             foreach ($payload['items'] as $item) {
                 $this->persist('order_items', [
@@ -1401,8 +1519,60 @@ class LegacyApiController extends Controller
                 ]);
             }
 
+            $this->ensureOrderChatThread(
+                (int) $payload['buyer_id'],
+                (int) $payload['supplier_id'],
+                (string) $payload['order_number']
+            );
+
             return $orderId;
         });
+    }
+
+    private function ensureOrderChatThread(int $buyerId, int $supplierId, string $orderNumber): int
+    {
+        $buyer = $this->findBuyer($buyerId);
+        $supplier = $this->findSupplier($supplierId);
+        $message = 'Order ' . $orderNumber . ' was placed and is waiting for supplier confirmation.';
+
+        $existing = DB::table('chat_threads')
+            ->where('buyer_id', $buyerId)
+            ->where('supplier_id', $supplierId)
+            ->first();
+
+        if ($existing) {
+            DB::table('chat_threads')->where('id', $existing->id)->update([
+                'subject' => $existing->subject ?: 'Order chat',
+                'last_message' => $message,
+                'last_message_at' => now(),
+                'supplier_unread_count' => ((int) $existing->supplier_unread_count) + 1,
+                'updated_at' => now(),
+            ]);
+            $threadId = (int) $existing->id;
+        } else {
+            $threadId = $this->persist('chat_threads', [
+                'buyer_id' => $buyerId,
+                'supplier_id' => $supplierId,
+                'subject' => 'Order chat',
+                'last_message' => $message,
+                'last_message_at' => now(),
+                'buyer_unread_count' => 0,
+                'supplier_unread_count' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $this->persist('chat_messages', [
+            'thread_id' => $threadId,
+            'sender_type' => 'buyer',
+            'sender_name' => (string) ($buyer['store_name'] ?? 'Buyer'),
+            'message_body' => $message,
+            'message_type' => 'order',
+            'created_at' => now(),
+        ]);
+
+        return $threadId;
     }
 
     private function registerBuyerDeviceToken(int $buyerId, string $firebaseToken, string $platform = 'android'): void
@@ -1774,6 +1944,14 @@ class LegacyApiController extends Controller
     {
         $value = DB::table('settings')->where('setting_key', $key)->value('setting_value');
         return $value === null ? $default : (string) $value;
+    }
+
+    private function currencyAmountLabel(float $amount): string
+    {
+        $currency = trim($this->settingValue('default_currency', 'PKR')) ?: 'PKR';
+        $formatted = rtrim(rtrim(number_format($amount, 2, '.', ''), '0'), '.');
+
+        return $formatted . ' ' . $currency;
     }
 
     private function referralProgramEnabled(): bool

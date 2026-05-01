@@ -113,7 +113,7 @@ class ApiController extends Controller
                 'title' => $data['title'],
                 'description' => $request->input('description', 'Supplier special offer'),
                 'badge_label' => $request->input('badge_label', 'Special Offer'),
-                'discount_label' => $request->input('discount_label', number_format((float) $data['offer_price'], 2) . ' PKR'),
+                'discount_label' => $request->input('discount_label', $this->currencyAmountLabel((float) $data['offer_price'])),
                 'supplier_product_id' => $data['listing_id'],
                 'catalog_product_id' => $data['catalog_product_id'],
                 'offer_price' => $data['offer_price'],
@@ -130,5 +130,13 @@ class ApiController extends Controller
     private function ok($data, string $message = 'OK')
     {
         return response()->json(['success' => true, 'message' => $message, 'data' => $data]);
+    }
+
+    private function currencyAmountLabel(float $amount): string
+    {
+        $currency = trim((string) DB::table('settings')->where('setting_key', 'default_currency')->value('setting_value')) ?: 'PKR';
+        $formatted = rtrim(rtrim(number_format($amount, 2, '.', ''), '0'), '.');
+
+        return $formatted . ' ' . $currency;
     }
 }
