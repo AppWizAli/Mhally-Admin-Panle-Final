@@ -69,5 +69,17 @@
         </div>
     </section>
 </div>
+<div class="page-loader" data-loading-overlay hidden aria-live="polite" aria-busy="true">
+    <div class="page-loader__card">
+        <div class="page-loader__spinner" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <strong>Signing you in</strong>
+        <p data-loading-text>Preparing the admin workspace…</p>
+    </div>
+</div>
+<script src="{{ asset('assets/js/app.js') }}"></script>
 </body>
 </html>

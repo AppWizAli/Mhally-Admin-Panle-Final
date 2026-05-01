@@ -1,6 +1,39 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const loadingOverlay = document.querySelector('[data-loading-overlay]');
+    const loadingText = loadingOverlay?.querySelector('[data-loading-text]');
     const shell = document.querySelector('[data-sidebar-shell]');
     const toggle = document.querySelector('[data-sidebar-toggle]');
+
+    const showLoader = (message) => {
+        if (!loadingOverlay) {
+            return;
+        }
+
+        if (loadingText && message) {
+            loadingText.textContent = message;
+        }
+
+        loadingOverlay.hidden = false;
+        requestAnimationFrame(() => loadingOverlay.classList.add('is-visible'));
+        document.body.classList.add('is-busy');
+    };
+
+    const hideLoader = () => {
+        if (!loadingOverlay) {
+            return;
+        }
+
+        loadingOverlay.classList.remove('is-visible');
+        loadingOverlay.hidden = true;
+        document.body.classList.remove('is-busy');
+    };
+
+    window.MhallyLoader = {
+        show: showLoader,
+        hide: hideLoader,
+    };
+
+    hideLoader();
 
     requestAnimationFrame(() => {
         document.body.classList.add('ui-ready');
@@ -35,6 +68,22 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('form.stack-form').forEach((form) => {
         form.addEventListener('submit', () => {
             form.classList.add('is-submitting');
+            showLoader(form.dataset.loadingText || 'Saving your changes…');
+        });
+    });
+
+    document.querySelectorAll('a[href]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+            if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                return;
+            }
+
+            const href = link.getAttribute('href') || '';
+            if (!href || href.startsWith('#') || href.startsWith('javascript:') || link.hasAttribute('download') || link.target === '_blank') {
+                return;
+            }
+
+            showLoader(link.dataset.loadingText || 'Loading the next screen…');
         });
     });
 
