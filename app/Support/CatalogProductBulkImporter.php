@@ -36,9 +36,9 @@ class CatalogProductBulkImporter
         ];
     }
 
-    public static function importFile(string $path): array
+    public static function importFile(string $path, ?string $extensionOverride = null): array
     {
-        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $extension = strtolower($extensionOverride ?: pathinfo($path, PATHINFO_EXTENSION));
         $rows = match ($extension) {
             'csv', 'txt' => self::readCsv($path),
             'xlsx' => self::readXlsx($path),

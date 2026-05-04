@@ -279,7 +279,11 @@ class AdminController extends Controller
         }
 
         try {
-            $summary = ProductBulkImporter::importFile($file->getRealPath(), (int) $request->input('supplier_id'));
+            $summary = ProductBulkImporter::importFile(
+                $file->getRealPath(),
+                (int) $request->input('supplier_id'),
+                $extension
+            );
         } catch (Throwable $exception) {
             return back()->withInput()->withErrors(['inventory_file' => $exception->getMessage()]);
         }
@@ -334,7 +338,10 @@ class AdminController extends Controller
         }
 
         try {
-            $summary = CatalogProductBulkImporter::importFile($file->getRealPath());
+            $summary = CatalogProductBulkImporter::importFile(
+                $file->getRealPath(),
+                $extension
+            );
         } catch (Throwable $exception) {
             return back()->withInput()->withErrors(['catalog_file' => $exception->getMessage()]);
         }
