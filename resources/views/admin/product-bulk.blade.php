@@ -5,26 +5,26 @@
 @endphp
 
 @section('page_action', 'create')
-@section('title', 'Bulk Upload Products')
+@section('title', __('panel.bulk.products_title'))
 
 @section('content')
     <section class="module-screen narrow">
         <div class="screen-head">
-            <a class="back-link" href="{{ route('admin.module.index', 'products') }}">&larr; Back to Products</a>
-            <a class="ghost-button" href="{{ route('admin.products.bulk.template') }}">Download CSV Template</a>
+            <a class="back-link" href="{{ route('admin.module.index', 'products') }}">&larr; {{ __('panel.common.back_to', ['title' => \App\Support\AdminUi::moduleTitle('products')]) }}</a>
+            <a class="ghost-button" href="{{ route('admin.products.bulk.template') }}">{{ __('panel.bulk.download_template') }}</a>
         </div>
 
         <section class="panel form-panel">
             <div class="page-block__header">
                 <div>
-                    <h3>Bulk Upload Products</h3>
-                    <p>Upload CSV or Excel inventory for one supplier. Imported products become active immediately.</p>
+                    <h3>{{ __('panel.bulk.products_title') }}</h3>
+                    <p>{{ __('panel.bulk.products_subtitle') }}</p>
                 </div>
             </div>
 
             @if($errors->any())
                 <div class="validation-summary" role="alert">
-                    <strong>Please review the upload.</strong>
+                    <strong>{{ __('panel.bulk.review_upload') }}</strong>
                     <p>{{ $errors->first() }}</p>
                 </div>
             @endif
@@ -33,9 +33,9 @@
                 @csrf
                 <div class="two-field">
                     <div class="form-field {{ $errors->has('supplier_id') ? 'has-error' : '' }}" style="--stagger: 1;">
-                        <label for="bulk_supplier_id"><span>Supplier <em>*</em></span></label>
+                        <label for="bulk_supplier_id"><span>{{ __('panel.bulk.supplier') }} <em>*</em></span></label>
                         <select id="bulk_supplier_id" name="supplier_id" class="{{ $errors->has('supplier_id') ? 'is-invalid' : '' }}">
-                            <option value="">Select supplier</option>
+                            <option value="">{{ __('panel.common.select', ['field' => __('panel.bulk.supplier')]) }}</option>
                             @foreach($suppliers as $supplierId => $supplierName)
                                 <option value="{{ $supplierId }}" {{ (string) old('supplier_id') === (string) $supplierId ? 'selected' : '' }}>{{ $supplierName }}</option>
                             @endforeach
@@ -46,9 +46,9 @@
                     </div>
 
                     <div class="form-field {{ $errors->has('inventory_file') ? 'has-error' : '' }}" style="--stagger: 2;">
-                        <label for="inventory_file"><span>Inventory File <em>*</em></span></label>
+                        <label for="inventory_file"><span>{{ __('panel.bulk.inventory_file') }} <em>*</em></span></label>
                         <input id="inventory_file" type="file" name="inventory_file" accept=".csv,.txt,.xlsx" class="{{ $errors->has('inventory_file') ? 'is-invalid' : '' }}">
-                        <small class="file-meta">Columns: Product Name, Category, Original Price, Offer Price, Max Offer Quantity, Stock Quantity.</small>
+                        <small class="file-meta">{{ __('panel.bulk.inventory_columns') }}</small>
                         @error('inventory_file')
                             <small class="field-error">{{ $message }}</small>
                         @enderror
@@ -56,8 +56,8 @@
                 </div>
 
                 <div class="form-actions" style="--stagger: 3;">
-                    <a class="ghost-button" href="{{ route('admin.module.index', 'products') }}">Cancel</a>
-                    <button class="primary-button" type="submit">Upload Products</button>
+                    <a class="ghost-button" href="{{ route('admin.module.index', 'products') }}">{{ __('panel.common.cancel') }}</a>
+                    <button class="primary-button" type="submit">{{ __('panel.bulk.upload_products') }}</button>
                 </div>
             </form>
         </section>
@@ -66,8 +66,8 @@
             <section class="panel">
                 <div class="page-block__header">
                     <div>
-                        <h3>Upload Report</h3>
-                        <p>{{ $summary['imported_count'] }} imported, {{ $summary['created_count'] }} created, {{ $summary['updated_count'] }} updated, {{ $summary['error_count'] }} issues.</p>
+                        <h3>{{ __('panel.bulk.report_title') }}</h3>
+                        <p>{{ __('panel.bulk.report_summary', ['imported' => $summary['imported_count'], 'created' => $summary['created_count'], 'updated' => $summary['updated_count'], 'errors' => $summary['error_count']]) }}</p>
                     </div>
                 </div>
 
@@ -76,9 +76,9 @@
                         <table class="data-table">
                             <thead>
                             <tr>
-                                <th>Row</th>
-                                <th>Field</th>
-                                <th>Issue</th>
+                                <th>{{ __('panel.bulk.row') }}</th>
+                                <th>{{ __('panel.bulk.field') }}</th>
+                                <th>{{ __('panel.bulk.issue') }}</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -93,7 +93,7 @@
                         </table>
                     </div>
                 @else
-                    <p class="subtle">All rows imported successfully.</p>
+                    <p class="subtle">{{ __('panel.bulk.all_products_success') }}</p>
                 @endif
             </section>
         @endif

@@ -19,14 +19,14 @@
 @endphp
 
 @section('page_action', 'show')
-@section('title', 'View ' . AdminUi::singularTitle($module))
+@section('title', __('panel.common.view') . ' ' . AdminUi::singularTitle($module))
 
 @section('content')
     <section class="module-screen narrow">
         <div class="screen-head">
-            <a class="back-link" href="{{ route('admin.module.index', $module) }}">&larr; Back to {{ $config['title'] }}</a>
+            <a class="back-link" href="{{ route('admin.module.index', $module) }}">&larr; {{ __('panel.common.back_to', ['title' => $config['title']]) }}</a>
             @if($config['editable'] ?? true)
-                <a class="primary-button" href="{{ route('admin.module.edit', [$module, $item->id]) }}">Edit {{ AdminUi::singularTitle($module) }}</a>
+                <a class="primary-button" href="{{ route('admin.module.edit', [$module, $item->id]) }}">{{ __('panel.common.edit') }} {{ AdminUi::singularTitle($module) }}</a>
             @endif
         </div>
 
@@ -34,10 +34,10 @@
             <div class="page-block__header">
                 <div>
                     <h3>{{ $pageTitle }}</h3>
-                    <p>{{ $subtitle ?? 'View record details from the Muhalli admin workflow.' }}</p>
+                    <p>{{ $subtitle ?? __('panel.pages.generic_subtitle') }}</p>
                 </div>
                 @if(isset($item->status))
-                    <span class="status-chip {{ AdminUi::statusBadgeClass($item->status) }}">{{ ucfirst((string) $item->status) }}</span>
+                    <span class="status-chip {{ AdminUi::statusBadgeClass($item->status) }}">{{ AdminUi::statusLabel($item->status) }}</span>
                 @endif
             </div>
 
@@ -53,7 +53,7 @@
                     <div>
                         <strong>{{ AdminUi::columnLabel($key) }}</strong>
                         @if($key === 'status')
-                            <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ ucfirst((string) $value) }}</span>
+                            <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ AdminUi::statusLabel($value) }}</span>
                         @elseif(in_array($key, ['image_url', 'emoji', 'icon'], true) && AdminUi::isImageReference($value))
                             <div class="detail-media">
                                 <img src="{{ AdminUi::mediaUrl($value) }}" alt="{{ AdminUi::columnLabel($key) }}">
@@ -91,7 +91,7 @@
                                     @php $value = data_get($row, $column); @endphp
                                     <td>
                                         @if($column === 'status')
-                                            <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ ucfirst((string) $value) }}</span>
+                                            <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ AdminUi::statusLabel($value) }}</span>
                                         @else
                                             {{ AdminUi::formatTableValue($column, $value) }}
                                         @endif
@@ -100,7 +100,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ count($block['columns']) }}" class="subtle">No related records found.</td>
+                                <td colspan="{{ count($block['columns']) }}" class="subtle">{{ __('panel.common.no_related_records') }}</td>
                             </tr>
                         @endforelse
                         </tbody>

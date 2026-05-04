@@ -17,12 +17,12 @@ class ProductBulkImporter
     ];
 
     private const HEADER_ALIASES = [
-        'product_name' => ['productname', 'product', 'name', 'itemname'],
-        'category' => ['category', 'categoryname'],
-        'original_price' => ['originalprice', 'price', 'baseprice', 'regularprice'],
-        'offer_price' => ['offerprice', 'saleprice', 'discountprice'],
-        'max_offer_quantity' => ['maxofferquantity', 'maximumofferquantity', 'maximumquantity', 'maxquantity', 'offerlimit', 'quantitylimit'],
-        'stock_quantity' => ['stockquantity', 'stock', 'quantity', 'availablequantity'],
+        'product_name' => ['productname', 'product', 'name', 'itemname', 'اسم المنتج', 'المنتج'],
+        'category' => ['category', 'categoryname', 'التصنيف', 'الفئة'],
+        'original_price' => ['originalprice', 'price', 'baseprice', 'regularprice', 'السعر الأصلي', 'السعر'],
+        'offer_price' => ['offerprice', 'saleprice', 'discountprice', 'سعر العرض'],
+        'max_offer_quantity' => ['maxofferquantity', 'maximumofferquantity', 'maximumquantity', 'maxquantity', 'offerlimit', 'quantitylimit', 'حد العرض', 'الحد الأقصى للعرض'],
+        'stock_quantity' => ['stockquantity', 'stock', 'quantity', 'availablequantity', 'الكمية', 'كمية المخزون', 'المخزون'],
     ];
 
     public static function templateHeaders(): array
@@ -404,7 +404,7 @@ class ProductBulkImporter
 
     private function normalizeHeader(string $header): string
     {
-        return preg_replace('/[^a-z0-9]+/', '', Str::lower($header)) ?: '';
+        return preg_replace('/[^\p{Arabic}a-z0-9]+/u', '', Str::lower($header)) ?: '';
     }
 
     private function label(string $field): string

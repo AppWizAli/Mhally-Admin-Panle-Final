@@ -19,7 +19,7 @@
                     @php $statusKey = $key === 'all' ? '' : $key; @endphp
                     <a class="tab-stat {{ $status === $statusKey ? 'is-active' : '' }}" href="{{ route('admin.module.index', ['module' => $module, 'status' => $statusKey]) }}">
                         <strong>{{ number_format((int) $value) }}</strong>
-                        <span>{{ ucfirst($key) }}</span>
+                        <span>{{ $key === 'all' ? __('panel.common.all') : AdminUi::statusLabel($key) }}</span>
                     </a>
                 @endforeach
             </div>
@@ -28,29 +28,29 @@
         <div class="screen-toolbar">
             <form method="get" class="toolbar-filters {{ count($statusOptions) <= 3 ? 'short' : '' }}">
                 <div class="search-input">
-                    <input type="search" name="search" value="{{ $search }}" placeholder="Search {{ strtolower($config['title']) }}...">
+                    <input type="search" name="search" value="{{ $search }}" placeholder="{{ __('panel.common.search') }} {{ $config['title'] }}...">
                 </div>
                 @if($module === 'offers')
-                    <input type="text" name="city" value="{{ $city }}" placeholder="City">
+                    <input type="text" name="city" value="{{ $city }}" placeholder="{{ AdminUi::columnLabel('city') }}">
                 @endif
                 @if($statusOptions)
                     <select name="status">
-                        <option value="">All Status</option>
+                        <option value="">{{ __('panel.common.all_status') }}</option>
                         @foreach($statusOptions as $option)
-                            <option value="{{ $option }}" {{ $status === $option ? 'selected' : '' }}>{{ ucfirst($option) }}</option>
+                            <option value="{{ $option }}" {{ $status === $option ? 'selected' : '' }}>{{ AdminUi::statusLabel($option) }}</option>
                         @endforeach
                     </select>
                 @endif
-                <button class="ghost-button" type="submit">{{ $statusOptions || $module === 'offers' ? 'Filters' : 'Search' }}</button>
+                <button class="ghost-button" type="submit">{{ $statusOptions || $module === 'offers' ? __('panel.common.filters') : __('panel.common.search') }}</button>
             </form>
             @if($module === 'products')
-                <a class="ghost-button" href="{{ route('admin.products.bulk') }}">Bulk Upload</a>
+                <a class="ghost-button" href="{{ route('admin.products.bulk') }}">{{ __('panel.common.bulk_upload') }}</a>
             @endif
             @if($module === 'catalog_products')
-                <a class="ghost-button" href="{{ route('admin.catalog-products.bulk') }}">Bulk Catalog Upload</a>
+                <a class="ghost-button" href="{{ route('admin.catalog-products.bulk') }}">{{ __('panel.common.bulk_catalog_upload') }}</a>
             @endif
             @if($canCreate)
-                <a class="primary-button" href="{{ route('admin.module.create', $module) }}">Add {{ AdminUi::singularTitle($module) }}</a>
+                <a class="primary-button" href="{{ route('admin.module.create', $module) }}">{{ __('panel.common.add', ['title' => AdminUi::singularTitle($module)]) }}</a>
             @endif
         </div>
 
@@ -58,7 +58,7 @@
             <div class="page-block__header">
                 <div>
                     <h3>{{ $config['title'] }}</h3>
-                    <p>{{ number_format($items->total()) }} records found for the selected filters.</p>
+                    <p>{{ __('panel.common.records_found', ['count' => number_format($items->total())]) }}</p>
                 </div>
             </div>
             <div class="table-wrap">
@@ -68,7 +68,7 @@
                         @foreach($config['list'] as $column)
                             <th>{{ AdminUi::columnLabel($column) }}</th>
                         @endforeach
-                        <th>Actions</th>
+                        <th>{{ __('panel.common.actions') }}</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -78,7 +78,7 @@
                                 @php $value = data_get($item, $column); @endphp
                                 <td>
                                     @if($column === 'status')
-                                        <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ ucfirst((string) $value) }}</span>
+                                        <span class="status-chip {{ AdminUi::statusBadgeClass($value) }}">{{ AdminUi::statusLabel($value) }}</span>
                                     @elseif($loop->first)
                                         <div class="table-title">
                                             <strong>{{ AdminUi::primaryCell($module, $item, $column) }}</strong>
@@ -91,15 +91,15 @@
                             @endforeach
                             <td>
                                 <div class="row-actions">
-                                    <a class="inline-link" href="{{ route('admin.module.show', [$module, $item->id]) }}">View</a>
+                                    <a class="inline-link" href="{{ route('admin.module.show', [$module, $item->id]) }}">{{ __('panel.common.view') }}</a>
                                     @if($config['editable'] ?? true)
-                                        <a class="inline-link" href="{{ route('admin.module.edit', [$module, $item->id]) }}">Edit</a>
+                                        <a class="inline-link" href="{{ route('admin.module.edit', [$module, $item->id]) }}">{{ __('panel.common.edit') }}</a>
                                     @endif
                                     @if($canDelete)
-                                        <form method="post" action="{{ route('admin.module.destroy', [$module, $item->id]) }}" onsubmit="return confirm('Delete this {{ strtolower(AdminUi::singularTitle($module)) }}?');">
+                                        <form method="post" action="{{ route('admin.module.destroy', [$module, $item->id]) }}" onsubmit="return confirm('{{ __('panel.common.delete_confirm', ['item' => AdminUi::singularTitle($module)]) }}');">
                                             @csrf
                                             @method('DELETE')
-                                            <button class="inline-link danger" type="submit">Delete</button>
+                                            <button class="inline-link danger" type="submit">{{ __('panel.common.delete') }}</button>
                                         </form>
                                     @endif
                                 </div>
@@ -107,7 +107,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ count($config['list']) + 1 }}" class="subtle">No records found.</td>
+                            <td colspan="{{ count($config['list']) + 1 }}" class="subtle">{{ __('panel.common.no_records') }}</td>
                         </tr>
                     @endforelse
                     </tbody>

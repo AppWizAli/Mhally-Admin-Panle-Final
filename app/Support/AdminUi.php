@@ -10,65 +10,104 @@ class AdminUi
     public static function navItems(): array
     {
         return [
-            'dashboard' => ['label' => 'Dashboard', 'icon' => 'grid', 'route' => route('admin.dashboard')],
-            'catalog_products' => ['label' => 'Catalog', 'icon' => 'layers', 'route' => route('admin.module.index', 'catalog_products')],
-            'products' => ['label' => 'Products', 'icon' => 'box', 'route' => route('admin.module.index', 'products')],
-            'suppliers' => ['label' => 'Suppliers', 'icon' => 'truck', 'route' => route('admin.module.index', 'suppliers')],
-            'buyers' => ['label' => 'Buyers', 'icon' => 'users', 'route' => route('admin.module.index', 'buyers')],
-            'offers' => ['label' => 'Offers', 'icon' => 'box', 'route' => route('admin.module.index', 'offers')],
-            'notifications' => ['label' => 'Notifications', 'icon' => 'message', 'route' => route('admin.module.index', 'notifications')],
-            'referral_claims' => ['label' => 'Referrals', 'icon' => 'users', 'route' => route('admin.module.index', 'referral_claims')],
-            'categories' => ['label' => 'Categories', 'icon' => 'layers', 'route' => route('admin.module.index', 'categories')],
-            'orders' => ['label' => 'Orders', 'icon' => 'clipboard', 'route' => route('admin.module.index', 'orders')],
-            'chats' => ['label' => 'Chats', 'icon' => 'message', 'route' => route('admin.module.index', 'chats')],
-            'settings' => ['label' => 'Settings', 'icon' => 'settings', 'route' => route('admin.module.index', 'settings')],
+            'dashboard' => ['label' => __('panel.nav.dashboard'), 'icon' => 'grid', 'route' => route('admin.dashboard')],
+            'catalog_products' => ['label' => __('panel.nav.catalog_products'), 'icon' => 'layers', 'route' => route('admin.module.index', 'catalog_products')],
+            'products' => ['label' => __('panel.nav.products'), 'icon' => 'box', 'route' => route('admin.module.index', 'products')],
+            'suppliers' => ['label' => __('panel.nav.suppliers'), 'icon' => 'truck', 'route' => route('admin.module.index', 'suppliers')],
+            'buyers' => ['label' => __('panel.nav.buyers'), 'icon' => 'users', 'route' => route('admin.module.index', 'buyers')],
+            'offers' => ['label' => __('panel.nav.offers'), 'icon' => 'box', 'route' => route('admin.module.index', 'offers')],
+            'notifications' => ['label' => __('panel.nav.notifications'), 'icon' => 'message', 'route' => route('admin.module.index', 'notifications')],
+            'referral_claims' => ['label' => __('panel.nav.referral_claims'), 'icon' => 'users', 'route' => route('admin.module.index', 'referral_claims')],
+            'categories' => ['label' => __('panel.nav.categories'), 'icon' => 'layers', 'route' => route('admin.module.index', 'categories')],
+            'orders' => ['label' => __('panel.nav.orders'), 'icon' => 'clipboard', 'route' => route('admin.module.index', 'orders')],
+            'chats' => ['label' => __('panel.nav.chats'), 'icon' => 'message', 'route' => route('admin.module.index', 'chats')],
+            'settings' => ['label' => __('panel.nav.settings'), 'icon' => 'settings', 'route' => route('admin.module.index', 'settings')],
         ];
     }
 
     public static function pageMeta(?string $module = null, string $action = 'list'): array
     {
         $map = [
-            'dashboard' => ['title' => 'Operations Dashboard', 'subtitle' => 'Control buyers, suppliers, products, orders, and app-ready APIs from one responsive panel.'],
-            'products' => ['title' => 'Product Listings', 'subtitle' => 'Manage catalog products and supplier-specific listings used by both buyer and supplier flows.'],
-            'catalog_products' => ['title' => 'Catalog Products', 'subtitle' => 'Create the master products that supplier listings connect to, such as rice, oil, snacks, or cleaning items.'],
-            'suppliers' => ['title' => 'Supplier Network', 'subtitle' => 'Review supplier onboarding, store details, business rules, and operational status.'],
-            'buyers' => ['title' => 'Buyer Accounts', 'subtitle' => 'Maintain retailer profiles, contact details, status, and order history access.'],
-            'offers' => ['title' => 'Offers & Campaigns', 'subtitle' => 'Create promotions that appear in the buyer app home experience and supplier search flows.'],
-            'notifications' => ['title' => 'Buyer Notifications', 'subtitle' => 'Compose announcements for all buyers, specific cities, or individual buyer accounts.'],
-            'referral_claims' => ['title' => 'Referral Program', 'subtitle' => 'Configure referral rewards and review which buyers are inviting new stores to the marketplace.'],
-            'categories' => ['title' => 'Categories', 'subtitle' => 'Organize the marketplace catalog with icons, sort order, and visibility status.'],
-            'orders' => ['title' => 'Orders & Fulfillment', 'subtitle' => 'Track marketplace orders, line items, payment status, and delivery progress.'],
-            'chats' => ['title' => 'Messages Monitor', 'subtitle' => 'View buyer-supplier conversation threads and recent message activity.'],
-            'settings' => ['title' => 'Settings & Profile', 'subtitle' => 'Update admin profile, system preferences, public app configuration, and API notes.'],
+            'dashboard' => ['title' => __('panel.pages.dashboard.title'), 'subtitle' => __('panel.pages.dashboard.subtitle')],
+            'products' => ['title' => __('panel.pages.products.title'), 'subtitle' => __('panel.pages.products.subtitle')],
+            'catalog_products' => ['title' => __('panel.pages.catalog_products.title'), 'subtitle' => __('panel.pages.catalog_products.subtitle')],
+            'suppliers' => ['title' => __('panel.pages.suppliers.title'), 'subtitle' => __('panel.pages.suppliers.subtitle')],
+            'buyers' => ['title' => __('panel.pages.buyers.title'), 'subtitle' => __('panel.pages.buyers.subtitle')],
+            'offers' => ['title' => __('panel.pages.offers.title'), 'subtitle' => __('panel.pages.offers.subtitle')],
+            'notifications' => ['title' => __('panel.pages.notifications.title'), 'subtitle' => __('panel.pages.notifications.subtitle')],
+            'referral_claims' => ['title' => __('panel.pages.referral_claims.title'), 'subtitle' => __('panel.pages.referral_claims.subtitle')],
+            'categories' => ['title' => __('panel.pages.categories.title'), 'subtitle' => __('panel.pages.categories.subtitle')],
+            'orders' => ['title' => __('panel.pages.orders.title'), 'subtitle' => __('panel.pages.orders.subtitle')],
+            'chats' => ['title' => __('panel.pages.chats.title'), 'subtitle' => __('panel.pages.chats.subtitle')],
+            'settings' => ['title' => __('panel.pages.settings.title'), 'subtitle' => __('panel.pages.settings.subtitle')],
         ];
 
         $key = $module ?: 'dashboard';
-        $meta = $map[$key] ?? ['title' => ucwords(str_replace('_', ' ', $key)), 'subtitle' => 'Manage marketplace records.'];
+        $meta = $map[$key] ?? ['title' => self::moduleTitle($key), 'subtitle' => __('panel.pages.generic_subtitle')];
 
         if ($key !== 'dashboard' && $action !== 'list') {
-            $prefix = ['create' => 'Add ', 'edit' => 'Edit ', 'show' => 'View '][$action] ?? '';
-            $meta['title'] = $prefix . self::singularTitle($key);
+            $meta['title'] = match ($action) {
+                'create' => __('panel.common.add_new', ['title' => self::singularTitle($key)]),
+                'edit' => __('panel.common.edit') . ' ' . self::singularTitle($key),
+                'show' => __('panel.common.view') . ' ' . self::singularTitle($key),
+                default => self::moduleTitle($key),
+            };
         }
 
         return $meta;
     }
 
+    public static function moduleTitle(string $module): string
+    {
+        $translated = __("panel.modules.{$module}.title");
+
+        return $translated !== "panel.modules.{$module}.title"
+            ? $translated
+            : ucwords(str_replace('_', ' ', $module));
+    }
+
     public static function singularTitle(string $module): string
     {
-        return match ($module) {
-            'products' => 'Product',
-            'catalog_products' => 'Catalog Product',
-            'suppliers' => 'Supplier',
-            'buyers' => 'Buyer',
-            'offers' => 'Offer',
-            'notifications' => 'Notification',
-            'referral_claims', 'referral_codes' => 'Referral',
-            'categories' => 'Category',
-            'orders' => 'Order',
-            'chats' => 'Chat',
-            'settings' => 'Setting',
-            default => rtrim(ucwords(str_replace('_', ' ', $module)), 's'),
-        };
+        $translated = __("panel.modules.{$module}.singular");
+
+        return $translated !== "panel.modules.{$module}.singular"
+            ? $translated
+            : rtrim(ucwords(str_replace('_', ' ', $module)), 's');
+    }
+
+    public static function moduleFormHelp(string $module, ?string $fallback = null): string
+    {
+        $translated = __("panel.modules.{$module}.form_help");
+
+        if ($translated !== "panel.modules.{$module}.form_help") {
+            return $translated;
+        }
+
+        return $fallback ?: __('panel.pages.generic_subtitle');
+    }
+
+    public static function statusLabel(?string $status): string
+    {
+        $key = str_replace([' ', '-'], '_', strtolower((string) $status));
+        $translated = __("panel.statuses.{$key}");
+
+        return $translated !== "panel.statuses.{$key}"
+            ? $translated
+            : ucwords(str_replace('_', ' ', $key));
+    }
+
+    public static function settingLabel(string $settingKey, ?string $fallback = null): string
+    {
+        $translated = __("panel.settings_labels.{$settingKey}");
+
+        return $translated !== "panel.settings_labels.{$settingKey}"
+            ? $translated
+            : ($fallback ?: self::columnLabel($settingKey));
+    }
+
+    public static function isRtl(): bool
+    {
+        return app()->getLocale() === 'ar';
     }
 
     public static function iconSvg(string $name): string
@@ -116,7 +155,7 @@ class AdminUi
     public static function shortDate($value): string
     {
         if (!$value) {
-            return 'N/A';
+            return __('panel.common.not_available');
         }
         return Carbon::parse($value)->format('d M Y');
     }
@@ -124,7 +163,7 @@ class AdminUi
     public static function longDate($value): string
     {
         if (!$value) {
-            return 'N/A';
+            return __('panel.common.not_available');
         }
         return Carbon::parse($value)->format('F d, Y');
     }
@@ -132,7 +171,7 @@ class AdminUi
     public static function displayValue($value): string
     {
         if ($value === null || $value === '') {
-            return 'N/A';
+            return __('panel.common.not_available');
         }
         if (is_numeric($value) && strlen((string) $value) > 12) {
             return (string) $value;
@@ -168,42 +207,19 @@ class AdminUi
 
     public static function columnLabel(string $column): string
     {
-        return match ($column) {
-            'order_number' => 'Order ID',
-            'catalog_product_id' => 'Catalog Product',
-            'supplier_id' => 'Supplier',
-            'supplier_product_id' => 'Supplier Product',
-            'category_id' => 'Category',
-            'icon' => 'Icon Image',
-            'emoji' => 'Emoji Image',
-            'image_url' => 'Image',
-            'catalog_name', 'product_name' => 'Product',
-            'business_name', 'supplier_name' => 'Supplier',
-            'store_name', 'buyer_name' => str_contains($column, 'store') ? 'Store' : 'Buyer',
-            'item_count' => 'Products',
-            'total_amount', 'minimum_order_amount' => 'Amount',
-            'total_sales' => 'Total Sales',
-            'delivered_sales' => 'Cleared Sales',
-            'pending_sales' => 'Being Cleared Sales',
-            'cleared_commission' => 'Cleared Commission',
-            'pending_commission' => 'Being Cleared Commission',
-            'admin_commission_amount' => 'Admin Commission',
-            'admin_commission_percentage' => 'Commission %',
-            'status_reason' => 'Status Reason',
-            'commission_status' => 'Commission Status',
-            'order_date' => 'Order Date',
-            'delivery_date' => 'Delivery Date',
-            'last_message_at' => 'Updated',
-            'referrer_store_name' => 'Referrer',
-            'referred_store_name' => 'Referred Buyer',
-            default => ucwords(str_replace('_', ' ', $column)),
-        };
+        $translated = __("panel.columns.{$column}");
+
+        if ($translated !== "panel.columns.{$column}") {
+            return $translated;
+        }
+
+        return ucwords(str_replace('_', ' ', $column));
     }
 
     public static function formatTableValue(string $column, $value): string
     {
         if ($column === 'commission_status') {
-            return self::displayValue($value);
+            return self::statusLabel((string) $value);
         }
 
         if (str_contains($column, 'percentage')) {
@@ -219,11 +235,11 @@ class AdminUi
         }
 
         if (is_bool($value) || in_array((string) $value, ['0', '1'], true) && str_starts_with($column, 'is_')) {
-            return (int) $value === 1 ? 'Yes' : 'No';
+            return (int) $value === 1 ? __('panel.common.yes') : __('panel.common.no');
         }
 
         if ($column === 'item_count') {
-            return number_format((int) $value) . ' items';
+            return number_format((int) $value) . ' ' . __('panel.common.items_suffix');
         }
 
         return self::displayValue($value);
@@ -251,7 +267,7 @@ class AdminUi
             'products' => trim((string) ($item->packaging ?? '') . ' / ' . (string) ($item->unit_type ?? ''), ' /'),
             'suppliers' => (string) ($item->business_license_number ?? $item->owner_name ?? ''),
             'buyers' => (string) ($item->buyer_name ?? ''),
-            'offers' => (string) ($item->description ?: 'No description'),
+            'offers' => (string) ($item->description ?: __('panel.common.not_available')),
             'notifications' => (string) ($item->message ?? ''),
             'categories' => (string) ($item->slug ?? ''),
             'orders' => (string) ($item->store_name ?? ''),

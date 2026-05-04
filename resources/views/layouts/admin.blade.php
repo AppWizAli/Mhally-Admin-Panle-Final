@@ -7,15 +7,15 @@
     $pageAction = View::yieldContent('page_action', 'list');
     $meta = AdminUi::pageMeta($activeModule, $pageAction);
     $adminUser = session('admin_user', []);
-    $adminName = $adminUser['full_name'] ?? 'Admin User';
-    $adminRole = $adminUser['role'] ?? 'Super Admin';
+    $adminName = $adminUser['full_name'] ?? __('panel.common.admin_user');
+    $adminRole = $adminUser['role'] ?? __('panel.common.super_admin');
 @endphp
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="{{ AdminUi::isRtl() ? 'rtl' : 'ltr' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $meta['title'] }} | {{ config('app.name') }}</title>
+    <title>{{ $meta['title'] }} | {{ __('panel.common.app_name') }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -29,8 +29,8 @@
             <a class="brand" href="{{ route('admin.dashboard') }}">
                 <span class="brand-mark">M</span>
                 <span>
-                    <strong>Muhalli Market</strong>
-                    <small>Admin Panel</small>
+                    <strong>{{ __('panel.brand.name') }}</strong>
+                    <small>{{ __('panel.brand.panel') }}</small>
                 </span>
             </a>
         </div>
@@ -45,7 +45,7 @@
         <div class="sidebar-footer">
             <form method="post" action="{{ route('logout') }}">
                 @csrf
-                <button class="logout-link" type="submit" style="border:0;background:transparent;padding:0">Log Out</button>
+                <button class="logout-link" type="submit" style="border:0;background:transparent;padding:0">{{ __('panel.common.logout') }}</button>
             </form>
         </div>
     </aside>
@@ -54,7 +54,7 @@
         <header class="topbar">
             <button class="icon-button mobile-only" type="button" data-sidebar-toggle>{!! AdminUi::iconSvg('menu') !!}</button>
             <div>
-                <p class="eyebrow">{{ config('app.name') }}</p>
+                <p class="eyebrow">{{ __('panel.common.app_name') }}</p>
                 <h1>@yield('title', $meta['title'])</h1>
                 <p class="subtle">{{ $meta['subtitle'] }}</p>
             </div>
@@ -74,7 +74,7 @@
         @endif
 
         @if($errors->any())
-            <div class="alert danger">{{ in_array($pageAction, ['create', 'edit'], true) ? 'Please review the highlighted fields below and try again.' : $errors->first() }}</div>
+            <div class="alert danger">{{ in_array($pageAction, ['create', 'edit'], true) ? __('panel.common.status_review') : $errors->first() }}</div>
         @endif
 
         <main class="page-grid">
@@ -89,8 +89,8 @@
             <span></span>
             <span></span>
         </div>
-        <strong>Working on it</strong>
-        <p data-loading-text>Loading the next step…</p>
+        <strong>{{ __('panel.common.loading_title') }}</strong>
+        <p data-loading-text>{{ __('panel.common.loading_body') }}</p>
     </div>
 </div>
 <script src="{{ asset('assets/js/app.js') }}"></script>

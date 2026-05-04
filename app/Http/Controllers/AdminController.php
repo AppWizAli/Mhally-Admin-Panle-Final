@@ -33,7 +33,7 @@ class AdminController extends Controller
 
         $admin = DB::table('admins')->where('email', $credentials['email'])->first();
         if (!$admin || !Hash::check($credentials['password'], $admin->password_hash)) {
-            return back()->withErrors(['email' => 'Invalid admin credentials.'])->withInput();
+            return back()->withErrors(['email' => __('panel.login.invalid_credentials')])->withInput();
         }
 
         $request->session()->put('admin_user', [
@@ -222,7 +222,7 @@ class AdminController extends Controller
             PushNotifications::dispatchAppNotification((int) $insertedId);
         }
 
-        return redirect()->route('admin.module.index', $module)->with('status', $config['title'] . ' created.');
+        return redirect()->route('admin.module.index', $module)->with('status', __('panel.messages.created', ['title' => AdminUi::moduleTitle($module)]));
     }
 
     public function update(string $module, int $id, Request $request)
@@ -247,7 +247,7 @@ class AdminController extends Controller
             PushNotifications::dispatchAppNotification($id);
         }
 
-        return redirect()->route('admin.module.index', $module)->with('status', $config['title'] . ' updated.');
+        return redirect()->route('admin.module.index', $module)->with('status', __('panel.messages.updated', ['title' => AdminUi::moduleTitle($module)]));
     }
 
     public function bulkProductsForm()
@@ -371,7 +371,7 @@ class AdminController extends Controller
         $config = $this->module($module);
         DB::table($config['table'])->where('id', $id)->delete();
 
-        return redirect()->route('admin.module.index', $module)->with('status', $config['title'] . ' deleted.');
+        return redirect()->route('admin.module.index', $module)->with('status', __('panel.messages.deleted', ['title' => $config['title']]));
     }
 
     public function saveProfile(Request $request)
@@ -399,7 +399,7 @@ class AdminController extends Controller
             'role' => $payload['role'] ?: ($user['role'] ?? 'Super Admin'),
         ]);
 
-        return back()->with('status', 'Profile updated.');
+        return back()->with('status', __('panel.messages.profile_updated'));
     }
 
     public function savePassword(Request $request)
@@ -415,7 +415,7 @@ class AdminController extends Controller
 
         $admin = DB::table('admins')->where('id', $user['id'])->first();
         if (!$admin || !Hash::check($payload['current_password'], $admin->password_hash)) {
-            return back()->withErrors(['current_password' => 'Current password is incorrect.']);
+            return back()->withErrors(['current_password' => __('panel.messages.current_password_incorrect')]);
         }
 
         DB::table('admins')->where('id', $user['id'])->update([
@@ -423,7 +423,7 @@ class AdminController extends Controller
             'updated_at' => now(),
         ]);
 
-        return back()->with('status', 'Password updated.');
+        return back()->with('status', __('panel.messages.password_updated'));
     }
 
     public function saveSettings(Request $request)
@@ -442,7 +442,7 @@ class AdminController extends Controller
                 ]);
         }
 
-        return back()->with('status', 'Settings saved.');
+        return back()->with('status', __('panel.messages.settings_saved'));
     }
 
     public function saveCommissionSettings(Request $request)
@@ -495,8 +495,8 @@ class AdminController extends Controller
         }
 
         $message = $scope === 'all_orders'
-            ? 'Commission percentage saved and applied to existing and future orders.'
-            : 'Commission percentage saved for future orders.';
+            ? __('panel.messages.commission_saved_all')
+            : __('panel.messages.commission_saved_new');
 
         return back()->with('status', $message);
     }
@@ -508,7 +508,7 @@ class AdminController extends Controller
 
         $message = trim((string) $request->input('message_body', ''));
         if ($message === '') {
-            return back()->withErrors(['message_body' => 'Enter a message first.']);
+            return back()->withErrors(['message_body' => __('panel.messages.message_required')]);
         }
 
         $adminUser = (array) $request->session()->get('admin_user', []);
@@ -528,7 +528,7 @@ class AdminController extends Controller
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('admin.module.show', ['module' => 'chats', 'id' => $id])->with('status', 'Message sent.');
+        return redirect()->route('admin.module.show', ['module' => 'chats', 'id' => $id])->with('status', __('panel.messages.message_sent'));
     }
 
     private function payload(string $module, array $config, Request $request, ?object $existingItem = null): array
@@ -973,7 +973,13 @@ class AdminController extends Controller
         $modules = config('muhalli.modules');
         abort_unless(isset($modules[$module]), 404);
 
-        return $modules[$module];
+        $config = $modules[$module];
+        $config['title'] = AdminUi::moduleTitle($module);
+        if (isset($config['form_help'])) {
+            $config['form_help'] = AdminUi::moduleFormHelp($module, (string) $config['form_help']);
+        }
+
+        return $config;
     }
 
     private function count(string $table, ?string $status = null): int

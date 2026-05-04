@@ -4,13 +4,15 @@
     use App\Support\AdminUi;
 
     $isEdit = (bool) $item;
-    $title = ($isEdit ? 'Edit ' : 'Add New ') . AdminUi::singularTitle($module);
+    $title = $isEdit
+        ? __('panel.common.edit') . ' ' . AdminUi::singularTitle($module)
+        : __('panel.common.add_new', ['title' => AdminUi::singularTitle($module)]);
     $requiredFields = $requiredFields ?? [];
     $fileFieldHelp = [
-        'icon' => 'Choose a clean icon image for this category.',
-        'emoji' => 'Choose a small emoji-style image or sticker for this catalog item.',
-        'catalog_products.image_url' => 'Choose the main product image used across the app.',
-        'offers.image_url' => 'Choose the banner image used on the offer card.',
+        'icon' => __('panel.common.file_help'),
+        'emoji' => __('panel.common.file_help'),
+        'catalog_products.image_url' => __('panel.common.file_help'),
+        'offers.image_url' => __('panel.common.file_help'),
     ];
     $fieldIndex = 0;
 @endphp
@@ -21,14 +23,14 @@
 @section('content')
     <section class="module-screen narrow">
         <div class="screen-head">
-            <a class="back-link" href="{{ route('admin.module.index', $module) }}">&larr; Back to {{ $config['title'] }}</a>
+            <a class="back-link" href="{{ route('admin.module.index', $module) }}">&larr; {{ __('panel.common.back_to', ['title' => $config['title']]) }}</a>
         </div>
 
         <section class="panel form-panel">
             <div class="page-block__header">
                 <div>
                     <h3>{{ $title }}</h3>
-                    <p>{{ $config['form_help'] ?? 'Use the same buyer and supplier app flow while managing this record.' }}</p>
+                    <p>{{ AdminUi::moduleFormHelp($module, $config['form_help'] ?? null) }}</p>
                 </div>
             </div>
 
@@ -41,8 +43,8 @@
 
             @if($errors->any())
                 <div class="validation-summary" role="alert">
-                    <strong>Please review the highlighted fields.</strong>
-                    <p>{{ $errors->count() }} issue{{ $errors->count() === 1 ? '' : 's' }} need attention before this form can be saved.</p>
+                    <strong>{{ __('panel.common.validation_summary_title') }}</strong>
+                    <p>{{ trans_choice('panel.common.validation_summary_body', $errors->count(), ['count' => $errors->count()]) }}</p>
                 </div>
             @endif
 
@@ -89,18 +91,18 @@
 
                                     @if($hasRelationOptions)
                                         <select id="{{ $fieldId }}" name="{{ $field }}" class="{{ $inputClasses }}" {{ $hasError ? 'aria-invalid=true' : '' }}>
-                                            <option value="">Select {{ strtolower($fieldLabel) }}</option>
+                                            <option value="">{{ __('panel.common.select', ['field' => strtolower($fieldLabel)]) }}</option>
                                             @foreach($options as $optionValue => $optionLabel)
                                                 <option value="{{ $optionValue }}" {{ (string) $currentValue === (string) $optionValue ? 'selected' : '' }}>{{ $optionLabel }}</option>
                                             @endforeach
                                         </select>
                                         @if(empty($options) && $createModule)
-                                            <small class="field-help">No {{ strtolower($fieldLabel) }} records found. <a href="{{ route('admin.module.create', $createModule) }}">Create one first</a>.</small>
+                                            <small class="field-help">{{ __('panel.common.no_relation_records', ['field' => strtolower($fieldLabel)]) }} <a href="{{ route('admin.module.create', $createModule) }}">{{ __('panel.common.create') }}</a>.</small>
                                         @endif
                                     @elseif(is_array($type))
                                         <select id="{{ $fieldId }}" name="{{ $field }}" class="{{ $inputClasses }}" {{ $hasError ? 'aria-invalid=true' : '' }}>
                                             @foreach($type as $option)
-                                                <option value="{{ $option }}" {{ (string) $currentValue === (string) $option ? 'selected' : '' }}>{{ ucfirst($option) }}</option>
+                                                <option value="{{ $option }}" {{ (string) $currentValue === (string) $option ? 'selected' : '' }}>{{ AdminUi::statusLabel($option) }}</option>
                                             @endforeach
                                         </select>
                                     @elseif($type === 'textarea')
@@ -127,7 +129,7 @@
                                             data-file-name="{{ $fieldId }}_file_name"
                                             {{ $hasError ? 'aria-invalid=true' : '' }}
                                         >
-                                        <small class="file-meta" id="{{ $fieldId }}_file_name">{{ $currentMediaUrl !== '' ? 'Current image is shown above. Choose a new file to replace it.' : $fileHelp }}</small>
+                                        <small class="file-meta" id="{{ $fieldId }}_file_name">{{ $currentMediaUrl !== '' ? __('panel.common.current_image_hint') : $fileHelp }}</small>
                                         @if($currentMediaUrl === '' && is_string($currentValue) && trim($currentValue) !== '')
                                             <small class="field-help">Current value: {{ $currentValue }}</small>
                                         @endif
@@ -145,8 +147,8 @@
                 @endforeach
 
                 <div class="form-actions" style="--stagger: {{ $fieldIndex + 1 }};">
-                    <a class="ghost-button" href="{{ route('admin.module.index', $module) }}">Cancel</a>
-                    <button class="primary-button" type="submit">{{ $isEdit ? 'Update ' : 'Create ' }}{{ AdminUi::singularTitle($module) }}</button>
+                    <a class="ghost-button" href="{{ route('admin.module.index', $module) }}">{{ __('panel.common.cancel') }}</a>
+                    <button class="primary-button" type="submit">{{ $isEdit ? __('panel.common.update') : __('panel.common.create') }} {{ AdminUi::singularTitle($module) }}</button>
                 </div>
             </form>
         </section>

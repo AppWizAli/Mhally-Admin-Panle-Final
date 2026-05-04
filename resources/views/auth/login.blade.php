@@ -1,41 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login | {{ config('app.name') }}</title>
+    <title>{{ __('panel.login.page_title') }} | {{ __('panel.common.app_name') }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.cdnfonts.com/css/lama-sans" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
 </head>
 <body class="login-body">
 <div class="login-shell">
     <section class="login-showcase">
-        <span class="pill accent">Buyer + Supplier Control</span>
-        <h1>Run the Muhalli marketplace from one responsive admin panel.</h1>
-        <p>The backend is designed around the actual buyer and supplier app flow: onboarding, accounts, catalog, supplier listings, inventory, orders, chats, earnings, and public app settings.</p>
-        <div class="showcase-grid">
-            <article class="showcase-card">
-                <strong>Frontend + Backend</strong>
-                <p>Laravel, Blade, CSS, JavaScript, and MySQL using the same admin experience as the original panel.</p>
-            </article>
-            <article class="showcase-card">
-                <strong>App-Ready APIs</strong>
-                <p>JSON endpoints for both apps are available in the same project for Android integration.</p>
-            </article>
-            <article class="showcase-card">
-                <strong>Responsive Layout</strong>
-                <p>The admin shell adapts for desktop, tablet, and mobile operations.</p>
-            </article>
-        </div>
+        <span class="pill accent">{{ __('panel.brand.panel') }}</span>
+        <h1>{{ __('panel.brand.name') }}</h1>
+        <p>{{ __('panel.login.subtitle') }}</p>
     </section>
 
     <section class="login-card">
         <div class="login-card__header">
-            <span class="pill">Admin Access</span>
-            <h2>Welcome back</h2>
-            <p>Use the seeded admin credentials after running the Laravel migration.</p>
+            <span class="pill">{{ __('panel.login.eyebrow') }}</span>
+            <h2>{{ __('panel.login.title') }}</h2>
+            <p>{{ __('panel.login.subtitle') }}</p>
         </div>
 
         @if(session('status'))
@@ -50,23 +37,17 @@
             @csrf
 
             <label>
-                <span>Email address</span>
-                <input type="email" name="email" value="{{ old('email', 'admin@muhalli.test') }}" required>
+                <span>{{ __('panel.login.email') }}</span>
+                <input type="email" name="email" value="{{ old('email') }}" required>
             </label>
 
             <label>
-                <span>Password</span>
-                <input type="password" name="password" value="{{ old('password', 'password') }}" required>
+                <span>{{ __('panel.login.password') }}</span>
+                <input type="password" name="password" required>
             </label>
 
-            <button class="primary-button full-width" type="submit">Sign in</button>
+            <button class="primary-button full-width" type="submit">{{ __('panel.login.submit') }}</button>
         </form>
-
-        <div class="login-footnote">
-            <strong>Seed credentials</strong>
-            <p>admin@muhalli.test / password</p>
-            <small>If login fails, run the Laravel migration and database seed first.</small>
-        </div>
     </section>
 </div>
 <div class="page-loader" data-loading-overlay hidden aria-live="polite" aria-busy="true">
@@ -76,8 +57,8 @@
             <span></span>
             <span></span>
         </div>
-        <strong>Signing you in</strong>
-        <p data-loading-text>Preparing the admin workspace…</p>
+        <strong>{{ __('panel.login.loading_title') }}</strong>
+        <p data-loading-text>{{ __('panel.login.loading_body') }}</p>
     </div>
 </div>
 <script src="{{ asset('assets/js/app.js') }}"></script>

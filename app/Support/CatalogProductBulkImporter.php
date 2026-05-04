@@ -12,14 +12,14 @@ class CatalogProductBulkImporter
     private const REQUIRED_HEADERS = ['product_name', 'category'];
 
     private const HEADER_ALIASES = [
-        'product_name' => ['productname', 'product', 'name', 'itemname'],
-        'category' => ['category', 'categoryname'],
-        'emoji' => ['emoji', 'emojiimage', 'icon'],
-        'description' => ['description', 'details'],
-        'packaging' => ['packaging', 'pack', 'size'],
-        'unit_type' => ['unittype', 'unit', 'unitlabel'],
-        'image_url' => ['imageurl', 'image', 'productimage', 'photourl'],
-        'status' => ['status'],
+        'product_name' => ['productname', 'product', 'name', 'itemname', 'اسم المنتج', 'المنتج'],
+        'category' => ['category', 'categoryname', 'التصنيف', 'الفئة'],
+        'emoji' => ['emoji', 'emojiimage', 'icon', 'ايموجي', 'إيموجي', 'أيقونة'],
+        'description' => ['description', 'details', 'الوصف', 'التفاصيل'],
+        'packaging' => ['packaging', 'pack', 'size', 'التعبئة', 'العبوة'],
+        'unit_type' => ['unittype', 'unit', 'unitlabel', 'نوع الوحدة', 'الوحدة'],
+        'image_url' => ['imageurl', 'image', 'productimage', 'photourl', 'رابط الصورة', 'الصورة'],
+        'status' => ['status', 'الحالة'],
     ];
 
     public static function templateHeaders(): array
@@ -247,7 +247,7 @@ class CatalogProductBulkImporter
             'packaging' => $value('packaging'),
             'unit_type' => $value('unit_type'),
             'image_url' => $value('image_url'),
-            'status' => strtolower($value('status') ?: 'active'),
+            'status' => $this->normalizeStatus($value('status') ?: 'active'),
         ];
     }
 
@@ -316,7 +316,17 @@ class CatalogProductBulkImporter
 
     private function normalizeHeader(string $header): string
     {
-        return preg_replace('/[^a-z0-9]+/', '', Str::lower($header)) ?: '';
+        return preg_replace('/[^\p{Arabic}a-z0-9]+/u', '', Str::lower($header)) ?: '';
+    }
+
+    private function normalizeStatus(string $status): string
+    {
+        return match (Str::lower(trim($status))) {
+            'نشط' => 'active',
+            'مسودة' => 'draft',
+            'مؤرشف' => 'archived',
+            default => Str::lower(trim($status)),
+        };
     }
 
     private function label(string $field): string
