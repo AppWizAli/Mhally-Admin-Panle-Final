@@ -376,9 +376,75 @@ class AdminController extends Controller
     public function destroy(string $module, int $id)
     {
         $config = $this->module($module);
+        abort_unless($this->moduleAllowsDelete($module, $config), 403);
+
         DB::table($config['table'])->where('id', $id)->delete();
 
         return redirect()->route('admin.module.index', $module)->with('status', __('panel.messages.deleted', ['title' => $config['title']]));
+    }
+
+    public function bulkDestroy(string $module, Request $request)
+    {
+        $config = $this->module($module);
+        abort_unless($this->moduleAllowsDelete($module, $config), 403);
+
+        $payload = $request->validate([
+            'delete_scope' => ['required', Rule::in(['selected', 'filtered'])],
+            'selected_ids' => ['nullable', 'array'],
+            'selected_ids.*' => ['integer'],
+            'search' => ['nullable', 'string'],
+            'status' => ['nullable', 'string'],
+            'city' => ['nullable', 'string'],
+        ]);
+
+        $redirect = ['module' => $module];
+        foreach (['search', 'status', 'city'] as $key) {
+            $value = trim((string) ($payload[$key] ?? ''));
+            if ($value !== '') {
+                $redirect[$key] = $value;
+            }
+        }
+
+        $scope = (string) $payload['delete_scope'];
+        $ids = $scope === 'filtered'
+            ? $this->moduleIndexQuery(
+                $module,
+                trim((string) ($payload['search'] ?? '')),
+                trim((string) ($payload['status'] ?? '')),
+                trim((string) ($payload['city'] ?? ''))
+            )->pluck('id')
+            : collect($payload['selected_ids'] ?? [])
+                ->map(static fn ($value) => (int) $value)
+                ->filter(static fn ($value) => $value > 0)
+                ->unique()
+                ->values();
+
+        if ($ids->isEmpty()) {
+            return redirect()
+                ->route('admin.module.index', $redirect)
+                ->withErrors(['bulk_delete' => __('panel.messages.bulk_delete_no_items')]);
+        }
+
+        try {
+            $deleted = DB::table($config['table'])->whereIn('id', $ids->all())->delete();
+        } catch (QueryException $exception) {
+            Log::warning('Admin bulk delete blocked by related data.', [
+                'module' => $module,
+                'ids' => $ids->take(25)->all(),
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()
+                ->route('admin.module.index', $redirect)
+                ->withErrors(['bulk_delete' => __('panel.messages.bulk_delete_blocked', ['title' => $config['title']])]);
+        }
+
+        return redirect()
+            ->route('admin.module.index', $redirect)
+            ->with('status', __('panel.messages.deleted_many', [
+                'count' => number_format($deleted),
+                'title' => AdminUi::moduleTitle($module),
+            ]));
     }
 
     public function saveProfile(Request $request)
@@ -987,6 +1053,11 @@ class AdminController extends Controller
         }
 
         return $config;
+    }
+
+    private function moduleAllowsDelete(string $module, array $config): bool
+    {
+        return $config['deletable'] ?? !in_array($module, ['orders', 'chats', 'referral_claims', 'referral_codes', 'devices', 'otp_requests'], true);
     }
 
     private function count(string $table, ?string $status = null): int

@@ -3,6 +3,7 @@
 @php
     use App\Support\AdminUi;
 
+    $canDelete = $config['deletable'] ?? !in_array($module, ['orders', 'chats', 'referral_claims', 'referral_codes', 'devices', 'otp_requests'], true);
     $titleField = collect([
         'catalog_name',
         'business_name',
@@ -25,9 +26,25 @@
     <section class="module-screen narrow">
         <div class="screen-head">
             <a class="back-link" href="{{ route('admin.module.index', $module) }}">&larr; {{ __('panel.common.back_to', ['title' => $config['title']]) }}</a>
-            @if($config['editable'] ?? true)
-                <a class="primary-button" href="{{ route('admin.module.edit', [$module, $item->id]) }}">{{ __('panel.common.edit') }} {{ AdminUi::singularTitle($module) }}</a>
-            @endif
+            <div class="screen-actions">
+                @if($config['editable'] ?? true)
+                    <a class="primary-button" href="{{ route('admin.module.edit', [$module, $item->id]) }}">{{ __('panel.common.edit') }} {{ AdminUi::singularTitle($module) }}</a>
+                @endif
+                @if($canDelete)
+                    <form
+                        method="post"
+                        action="{{ route('admin.module.destroy', [$module, $item->id]) }}"
+                        data-delete-confirm
+                        data-confirm-message="{{ __('panel.common.delete_single_prompt', ['item' => AdminUi::singularTitle($module)]) }}"
+                        data-confirm-error="{{ __('panel.common.delete_prompt_error') }}"
+                        data-loading-text="{{ __('panel.common.deleting_item') }}"
+                    >
+                        @csrf
+                        @method('DELETE')
+                        <button class="danger-button" type="submit">{{ __('panel.common.delete') }}</button>
+                    </form>
+                @endif
+            </div>
         </div>
 
         <section class="panel">

@@ -7,6 +7,7 @@
     $statusOptions = is_array($statusField) ? $statusField : [];
     $canCreate = $config['creatable'] ?? !in_array($module, ['orders', 'chats', 'referral_claims', 'referral_codes', 'devices', 'otp_requests'], true);
     $canDelete = $config['deletable'] ?? !in_array($module, ['orders', 'chats', 'referral_claims', 'referral_codes', 'devices', 'otp_requests'], true);
+    $canBulkDelete = $canDelete && $items->count() > 0;
 @endphp
 
 @section('title', $config['title'])
@@ -61,10 +62,67 @@
                     <p>{{ __('panel.common.records_found', ['count' => number_format($items->total())]) }}</p>
                 </div>
             </div>
+            @if($canBulkDelete)
+                <form
+                    id="bulk-delete-form"
+                    method="post"
+                    action="{{ route('admin.module.bulk-destroy', $module) }}"
+                    class="bulk-actions"
+                    data-delete-confirm
+                    data-selection-form="true"
+                    data-select-required-message="{{ __('panel.messages.bulk_delete_no_items') }}"
+                    data-selected-count-template="{{ __('panel.common.selected_count', ['count' => '__count__']) }}"
+                >
+                    @csrf
+                    <input type="hidden" name="delete_scope" value="selected" data-delete-scope-input>
+                    <input type="hidden" name="search" value="{{ $search }}">
+                    <input type="hidden" name="status" value="{{ $status }}">
+                    <input type="hidden" name="city" value="{{ $city }}">
+
+                    <div class="bulk-actions__meta">
+                        <label class="check-pill bulk-select" for="bulk-delete-toggle">
+                            <input type="checkbox" id="bulk-delete-toggle" data-select-all data-form-id="bulk-delete-form">
+                            <span>{{ __('panel.common.select_all_page') }}</span>
+                        </label>
+                        <strong data-selected-count>{{ __('panel.common.selected_count', ['count' => 0]) }}</strong>
+                        <small>{{ __('panel.common.bulk_delete_help') }}</small>
+                    </div>
+
+                    <div class="bulk-actions__buttons">
+                        <button
+                            type="submit"
+                            class="danger-button"
+                            data-delete-scope="selected"
+                            data-selected-action
+                            data-confirm-message="{{ __('panel.common.delete_selected_prompt', ['title' => AdminUi::moduleTitle($module)]) }}"
+                            data-confirm-error="{{ __('panel.common.delete_prompt_error') }}"
+                            data-loading-text="{{ __('panel.common.deleting_selected') }}"
+                            disabled
+                        >
+                            {{ __('panel.common.delete_selected') }}
+                        </button>
+                        <button
+                            type="submit"
+                            class="ghost-button danger-outline"
+                            data-delete-scope="filtered"
+                            data-confirm-message="{{ __('panel.common.delete_all_results_prompt', ['count' => number_format($items->total()), 'title' => AdminUi::moduleTitle($module)]) }}"
+                            data-confirm-error="{{ __('panel.common.delete_prompt_error') }}"
+                            data-loading-text="{{ __('panel.common.deleting_all_results') }}"
+                        >
+                            {{ __('panel.common.delete_all_results', ['count' => number_format($items->total())]) }}
+                        </button>
+                    </div>
+                </form>
+            @endif
             <div class="table-wrap">
                 <table class="data-table">
                     <thead>
                     <tr>
+                        @if($canBulkDelete)
+                            <th class="selection-cell">
+                                <input type="checkbox" data-select-all data-form-id="bulk-delete-form" aria-label="{{ __('panel.common.select_all_page') }}">
+                            </th>
+                        @endif
                         @foreach($config['list'] as $column)
                             <th>{{ AdminUi::columnLabel($column) }}</th>
                         @endforeach
@@ -74,6 +132,18 @@
                     <tbody>
                     @forelse($items as $item)
                         <tr>
+                            @if($canBulkDelete)
+                                <td class="selection-cell">
+                                    <input
+                                        type="checkbox"
+                                        name="selected_ids[]"
+                                        value="{{ $item->id }}"
+                                        form="bulk-delete-form"
+                                        data-row-select
+                                        aria-label="{{ __('panel.common.select_record') }}"
+                                    >
+                                </td>
+                            @endif
                             @foreach($config['list'] as $column)
                                 @php $value = data_get($item, $column); @endphp
                                 <td>
@@ -96,7 +166,14 @@
                                         <a class="inline-link" href="{{ route('admin.module.edit', [$module, $item->id]) }}">{{ __('panel.common.edit') }}</a>
                                     @endif
                                     @if($canDelete)
-                                        <form method="post" action="{{ route('admin.module.destroy', [$module, $item->id]) }}" onsubmit="return confirm('{{ __('panel.common.delete_confirm', ['item' => AdminUi::singularTitle($module)]) }}');">
+                                        <form
+                                            method="post"
+                                            action="{{ route('admin.module.destroy', [$module, $item->id]) }}"
+                                            data-delete-confirm
+                                            data-confirm-message="{{ __('panel.common.delete_single_prompt', ['item' => AdminUi::singularTitle($module)]) }}"
+                                            data-confirm-error="{{ __('panel.common.delete_prompt_error') }}"
+                                            data-loading-text="{{ __('panel.common.deleting_item') }}"
+                                        >
                                             @csrf
                                             @method('DELETE')
                                             <button class="inline-link danger" type="submit">{{ __('panel.common.delete') }}</button>
@@ -107,7 +184,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ count($config['list']) + 1 }}" class="subtle">{{ __('panel.common.no_records') }}</td>
+                            <td colspan="{{ count($config['list']) + 1 + ($canBulkDelete ? 1 : 0) }}" class="subtle">{{ __('panel.common.no_records') }}</td>
                         </tr>
                     @endforelse
                     </tbody>

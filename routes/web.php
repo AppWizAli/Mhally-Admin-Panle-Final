@@ -24,6 +24,7 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('/admin/{module}', [AdminController::class, 'index'])->name('admin.module.index');
     Route::get('/admin/{module}/create', [AdminController::class, 'create'])->name('admin.module.create');
     Route::post('/admin/{module}', [AdminController::class, 'store'])->name('admin.module.store');
+    Route::post('/admin/{module}/bulk-delete', [AdminController::class, 'bulkDestroy'])->name('admin.module.bulk-destroy');
     Route::get('/admin/{module}/{id}', [AdminController::class, 'show'])->name('admin.module.show');
     Route::get('/admin/{module}/{id}/edit', [AdminController::class, 'edit'])->name('admin.module.edit');
     Route::put('/admin/{module}/{id}', [AdminController::class, 'update'])->name('admin.module.update');

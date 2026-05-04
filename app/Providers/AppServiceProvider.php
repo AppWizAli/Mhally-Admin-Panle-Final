@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
@@ -30,6 +31,9 @@ class AppServiceProvider extends ServiceProvider
         if ($this->app->environment('production')) {
             URL::forceScheme('https');
         }
+
+        Paginator::defaultView('vendor.pagination.admin');
+        Paginator::defaultSimpleView('vendor.pagination.simple-admin');
 
         $this->app->setLocale($this->resolveLocale());
     }

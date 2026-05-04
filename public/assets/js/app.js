@@ -134,6 +134,94 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    document.querySelectorAll('form[data-delete-confirm]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (form.dataset.confirmed === 'true') {
+                return;
+            }
+
+            const submitter = event.submitter;
+            const scopeInput = form.querySelector('[data-delete-scope-input]');
+            if (scopeInput && submitter?.dataset.deleteScope) {
+                scopeInput.value = submitter.dataset.deleteScope;
+            }
+
+            const scope = submitter?.dataset.deleteScope || scopeInput?.value || 'selected';
+            if (form.dataset.selectionForm === 'true' && scope === 'selected') {
+                const selected = Array.from(document.querySelectorAll(`input[form="${form.id}"][data-row-select]:checked`));
+                if (selected.length === 0) {
+                    event.preventDefault();
+                    window.alert(form.dataset.selectRequiredMessage || 'Select at least one row before deleting.');
+                    return;
+                }
+            }
+
+            const keyword = (submitter?.dataset.confirmKeyword || form.dataset.confirmKeyword || 'DELETE').trim().toUpperCase();
+            const message = submitter?.dataset.confirmMessage || form.dataset.confirmMessage || `Type ${keyword} to confirm deletion.`;
+            const errorMessage = submitter?.dataset.confirmError || form.dataset.confirmError || `Deletion cancelled. Type ${keyword} exactly to continue.`;
+            const typed = window.prompt(message, '');
+
+            if (typed === null) {
+                event.preventDefault();
+                return;
+            }
+
+            if (typed.trim().toUpperCase() !== keyword) {
+                event.preventDefault();
+                window.alert(errorMessage);
+                return;
+            }
+
+            form.dataset.confirmed = 'true';
+            showLoader(submitter?.dataset.loadingText || form.dataset.loadingText || 'Deleting records...');
+        });
+    });
+
+    document.querySelectorAll('form[data-selection-form]').forEach((form) => {
+        const rowSelectors = Array.from(document.querySelectorAll(`input[form="${form.id}"][data-row-select]`));
+        const selectAllBoxes = Array.from(document.querySelectorAll(`[data-select-all][data-form-id="${form.id}"]`));
+        const selectedCount = form.querySelector('[data-selected-count]');
+        const selectedButton = form.querySelector('[data-selected-action]');
+        const selectedCountTemplate = form.dataset.selectedCountTemplate || '__count__ selected';
+
+        if (rowSelectors.length === 0) {
+            return;
+        }
+
+        const updateSelectionState = () => {
+            const checkedCount = rowSelectors.filter((input) => input.checked).length;
+            const allChecked = checkedCount > 0 && checkedCount === rowSelectors.length;
+
+            selectAllBoxes.forEach((checkbox) => {
+                checkbox.checked = allChecked;
+                checkbox.indeterminate = checkedCount > 0 && checkedCount < rowSelectors.length;
+            });
+
+            if (selectedCount) {
+                selectedCount.textContent = selectedCountTemplate.replace('__count__', checkedCount.toString());
+            }
+
+            if (selectedButton) {
+                selectedButton.disabled = checkedCount === 0;
+            }
+        };
+
+        rowSelectors.forEach((input) => {
+            input.addEventListener('change', updateSelectionState);
+        });
+
+        selectAllBoxes.forEach((checkbox) => {
+            checkbox.addEventListener('change', () => {
+                rowSelectors.forEach((input) => {
+                    input.checked = checkbox.checked;
+                });
+                updateSelectionState();
+            });
+        });
+
+        updateSelectionState();
+    });
+
     setTimeout(() => {
         document.querySelectorAll('.alert').forEach((element) => {
             element.style.transition = 'opacity .25s ease, transform .25s ease';
