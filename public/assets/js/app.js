@@ -134,6 +134,221 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const asyncPickers = Array.from(document.querySelectorAll('[data-async-picker]'));
+
+    const closeAsyncPicker = (picker) => {
+        const panel = picker.querySelector('[data-async-picker-panel]');
+        const trigger = picker.querySelector('[data-async-picker-trigger]');
+        if (panel) {
+            panel.hidden = true;
+        }
+        if (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+        picker.classList.remove('is-open');
+    };
+
+    asyncPickers.forEach((picker) => {
+        const hiddenInput = picker.querySelector('input[type="hidden"]');
+        const trigger = picker.querySelector('[data-async-picker-trigger]');
+        const panel = picker.querySelector('[data-async-picker-panel]');
+        const searchInput = picker.querySelector('[data-async-picker-search]');
+        const results = picker.querySelector('[data-async-picker-results]');
+        const status = picker.querySelector('[data-async-picker-status]');
+        const label = picker.querySelector('[data-async-picker-label]');
+        const meta = picker.querySelector('[data-async-picker-meta]');
+        const clearButton = picker.querySelector('[data-async-picker-clear]');
+
+        if (!hiddenInput || !trigger || !panel || !searchInput || !results || !status || !label || !meta) {
+            return;
+        }
+
+        const state = {
+            endpoint: picker.dataset.endpoint || '',
+            search: '',
+            page: 1,
+            hasMore: true,
+            isLoading: false,
+            hasLoaded: false,
+            items: [],
+            debounceId: null,
+        };
+
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+
+        const renderStatus = (message) => {
+            status.textContent = message;
+        };
+
+        const setSelection = (item) => {
+            const emptyLabel = picker.dataset.emptyLabel || '';
+            const emptyMeta = picker.dataset.emptyMeta || '';
+
+            if (!item) {
+                hiddenInput.value = '';
+                label.textContent = emptyLabel;
+                meta.textContent = emptyMeta;
+            } else {
+                hiddenInput.value = String(item.id || '');
+                label.textContent = item.label || emptyLabel;
+                meta.textContent = item.meta || '';
+            }
+
+            const wrapper = hiddenInput.closest('.form-field');
+            if (wrapper) {
+                wrapper.classList.remove('has-error');
+            }
+            trigger.classList.remove('is-invalid');
+        };
+
+        const renderItems = () => {
+            if (!state.items.length) {
+                results.innerHTML = `<div class="async-picker__empty">${picker.dataset.emptyText || ''}</div>`;
+                return;
+            }
+
+            results.innerHTML = state.items.map((item) => {
+                const selected = String(hiddenInput.value) === String(item.id);
+                return `
+                    <button type="button" class="async-picker__option ${selected ? 'is-selected' : ''}" data-option-id="${escapeHtml(item.id)}">
+                        <strong>${escapeHtml(item.label || '')}</strong>
+                        <small>${escapeHtml(item.meta || '')}</small>
+                    </button>
+                `;
+            }).join('');
+        };
+
+        const loadItems = async (page, append = false) => {
+            if (state.isLoading || !state.endpoint) {
+                return;
+            }
+
+            state.isLoading = true;
+            renderStatus(picker.dataset.loadingText || '');
+
+            try {
+                const url = new URL(state.endpoint, window.location.origin);
+                url.searchParams.set('page', String(page));
+                url.searchParams.set('limit', '25');
+                if (state.search) {
+                    url.searchParams.set('search', state.search);
+                }
+
+                const response = await fetch(url.toString(), {
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+
+                const payload = await response.json();
+                const items = Array.isArray(payload.items) ? payload.items : [];
+                const pagination = payload.pagination || {};
+
+                state.page = Number(pagination.page || page);
+                state.hasMore = Boolean(pagination.has_more);
+                state.items = append ? state.items.concat(items) : items;
+                state.hasLoaded = true;
+
+                renderItems();
+
+                if (!state.items.length) {
+                    renderStatus(picker.dataset.emptyText || '');
+                } else if (state.hasMore) {
+                    renderStatus(picker.dataset.scrollText || '');
+                } else {
+                    renderStatus('');
+                }
+            } catch (error) {
+                renderStatus(picker.dataset.errorText || '');
+            } finally {
+                state.isLoading = false;
+            }
+        };
+
+        trigger.addEventListener('click', () => {
+            const isOpen = !panel.hidden;
+            asyncPickers.forEach((item) => {
+                if (item !== picker) {
+                    closeAsyncPicker(item);
+                }
+            });
+
+            if (isOpen) {
+                closeAsyncPicker(picker);
+                return;
+            }
+
+            panel.hidden = false;
+            trigger.setAttribute('aria-expanded', 'true');
+            picker.classList.add('is-open');
+            searchInput.focus();
+
+            if (!state.hasLoaded) {
+                loadItems(1);
+            }
+        });
+
+        clearButton?.addEventListener('click', () => {
+            setSelection(null);
+            closeAsyncPicker(picker);
+        });
+
+        searchInput.addEventListener('input', () => {
+            window.clearTimeout(state.debounceId);
+            state.debounceId = window.setTimeout(() => {
+                state.search = searchInput.value.trim();
+                state.page = 1;
+                state.hasMore = true;
+                loadItems(1);
+            }, 250);
+        });
+
+        results.addEventListener('scroll', () => {
+            if (!state.hasMore || state.isLoading) {
+                return;
+            }
+
+            if (results.scrollTop + results.clientHeight >= results.scrollHeight - 48) {
+                loadItems(state.page + 1, true);
+            }
+        });
+
+        results.addEventListener('click', (event) => {
+            const option = event.target.closest('[data-option-id]');
+            if (!option) {
+                return;
+            }
+
+            const selected = state.items.find((item) => String(item.id) === String(option.dataset.optionId));
+            if (!selected) {
+                return;
+            }
+
+            setSelection(selected);
+            renderItems();
+            closeAsyncPicker(picker);
+        });
+    });
+
+    document.addEventListener('click', (event) => {
+        asyncPickers.forEach((picker) => {
+            if (!picker.contains(event.target)) {
+                closeAsyncPicker(picker);
+            }
+        });
+    });
+
     document.querySelectorAll('form[data-delete-confirm]').forEach((form) => {
         form.addEventListener('submit', (event) => {
             if (form.dataset.confirmed === 'true') {

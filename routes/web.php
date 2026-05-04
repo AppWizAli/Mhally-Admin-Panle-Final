@@ -15,6 +15,9 @@ Route::middleware('admin.auth')->group(function () {
     Route::post('/admin/settings/app', [AdminController::class, 'saveSettings'])->name('admin.settings.app');
     Route::post('/admin/settings/commission', [AdminController::class, 'saveCommissionSettings'])->name('admin.settings.commission');
     Route::post('/admin/chats/{id}/message', [AdminController::class, 'sendChatMessage'])->name('admin.chats.message');
+    Route::get('/admin/async/catalog-products', [AdminController::class, 'asyncCatalogProducts'])->name('admin.async.catalog-products');
+    Route::get('/admin/async/suppliers', [AdminController::class, 'asyncSuppliers'])->name('admin.async.suppliers');
+    Route::get('/admin/async/supplier-products', [AdminController::class, 'asyncSupplierProducts'])->name('admin.async.supplier-products');
     Route::get('/admin/products/bulk-upload', [AdminController::class, 'bulkProductsForm'])->name('admin.products.bulk');
     Route::post('/admin/products/bulk-upload', [AdminController::class, 'bulkProductsUpload'])->name('admin.products.bulk.upload');
     Route::get('/admin/products/bulk-template', [AdminController::class, 'bulkProductsTemplate'])->name('admin.products.bulk.template');

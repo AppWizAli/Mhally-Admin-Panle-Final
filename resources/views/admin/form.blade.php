@@ -8,6 +8,8 @@
         ? __('panel.common.edit') . ' ' . AdminUi::singularTitle($module)
         : __('panel.common.add_new', ['title' => AdminUi::singularTitle($module)]);
     $requiredFields = $requiredFields ?? [];
+    $asyncFieldConfigs = $asyncFieldConfigs ?? [];
+    $selectedAsyncOptions = $selectedAsyncOptions ?? [];
     $fileFieldHelp = [
         'icon' => __('panel.common.file_help'),
         'emoji' => __('panel.common.file_help'),
@@ -76,6 +78,11 @@
                                 $currentMediaUrl = AdminUi::isImageReference($currentValue) ? AdminUi::mediaUrl($currentValue) : '';
                                 $fileHelp = $fileFieldHelp[$module . '.' . $field] ?? $fileFieldHelp[$field] ?? 'PNG, JPG, or WEBP up to 4 MB.';
                                 $inputClasses = trim($hasError ? 'is-invalid' : '');
+                                $asyncConfig = $asyncFieldConfigs[$field] ?? null;
+                                $selectedOption = $selectedAsyncOptions[$field] ?? null;
+                                $selectedId = $currentValue !== null && $currentValue !== '' ? (string) $currentValue : '';
+                                $selectedLabel = $selectedOption['label'] ?? ($selectedId !== '' ? __('panel.async.selected_value') : ($asyncConfig['empty_label'] ?? ''));
+                                $selectedMeta = $selectedOption['meta'] ?? ($asyncConfig['empty_meta'] ?? '');
                             @endphp
 
                             <div class="form-field {{ $inputType === 'checkbox' ? 'is-checkbox' : '' }} {{ $hasError ? 'has-error' : '' }}" style="--stagger: {{ $fieldIndex }};">
@@ -89,7 +96,37 @@
                                         <span>{{ $fieldLabel }}@if($isRequired) <em>*</em>@endif</span>
                                     </label>
 
-                                    @if($hasRelationOptions)
+                                    @if($asyncConfig)
+                                        <div
+                                            class="async-picker"
+                                            data-async-picker
+                                            data-endpoint="{{ $asyncConfig['endpoint'] }}"
+                                            data-search-placeholder="{{ $asyncConfig['search_placeholder'] }}"
+                                            data-empty-label="{{ $asyncConfig['empty_label'] }}"
+                                            data-empty-meta="{{ $asyncConfig['empty_meta'] }}"
+                                            data-loading-text="{{ __('panel.async.loading') }}"
+                                            data-empty-text="{{ __('panel.async.no_results') }}"
+                                            data-error-text="{{ __('panel.async.failed') }}"
+                                            data-scroll-text="{{ __('panel.async.scroll_more') }}"
+                                        >
+                                            <input type="hidden" id="{{ $fieldId }}" name="{{ $field }}" value="{{ $selectedId }}">
+                                            <button type="button" class="async-picker__trigger {{ $inputClasses }}" data-async-picker-trigger {{ $hasError ? 'aria-invalid=true' : '' }}>
+                                                <span class="async-picker__copy">
+                                                    <strong data-async-picker-label>{{ $selectedLabel }}</strong>
+                                                    <small data-async-picker-meta>{{ $selectedMeta }}</small>
+                                                </span>
+                                                <span class="async-picker__icon" aria-hidden="true">▾</span>
+                                            </button>
+                                            <div class="async-picker__panel" data-async-picker-panel hidden>
+                                                <div class="async-picker__search-row">
+                                                    <input type="search" class="async-picker__search" data-async-picker-search placeholder="{{ $asyncConfig['search_placeholder'] }}">
+                                                    <button type="button" class="ghost-button async-picker__clear" data-async-picker-clear>{{ __('panel.async.clear') }}</button>
+                                                </div>
+                                                <div class="async-picker__results" data-async-picker-results></div>
+                                                <div class="async-picker__status" data-async-picker-status>{{ __('panel.async.search_prompt') }}</div>
+                                            </div>
+                                        </div>
+                                    @elseif($hasRelationOptions)
                                         <select id="{{ $fieldId }}" name="{{ $field }}" class="{{ $inputClasses }}" {{ $hasError ? 'aria-invalid=true' : '' }}>
                                             <option value="">{{ __('panel.common.select', ['field' => strtolower($fieldLabel)]) }}</option>
                                             @foreach($options as $optionValue => $optionLabel)

@@ -182,9 +182,11 @@ class AdminController extends Controller
         $config = $this->module($module);
         $item = null;
         $fieldOptions = $this->fieldOptions($module);
+        $asyncFieldConfigs = $this->asyncFieldConfigs($module);
+        $selectedAsyncOptions = [];
         $requiredFields = $this->requiredFieldMap($this->validationRules($module, $config));
 
-        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions', 'requiredFields'));
+        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions', 'asyncFieldConfigs', 'selectedAsyncOptions', 'requiredFields'));
     }
 
     public function edit(string $module, int $id)
@@ -193,9 +195,38 @@ class AdminController extends Controller
         $item = DB::table($config['table'])->where('id', $id)->first();
         abort_if(!$item, 404);
         $fieldOptions = $this->fieldOptions($module);
+        $asyncFieldConfigs = $this->asyncFieldConfigs($module);
+        $selectedAsyncOptions = $this->selectedAsyncOptions($module, $item);
         $requiredFields = $this->requiredFieldMap($this->validationRules($module, $config, $id));
 
-        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions', 'requiredFields'));
+        return view('admin.form', compact('module', 'config', 'item', 'fieldOptions', 'asyncFieldConfigs', 'selectedAsyncOptions', 'requiredFields'));
+    }
+
+    public function asyncCatalogProducts(Request $request)
+    {
+        return response()->json($this->catalogProductOptionsPayload(
+            trim((string) $request->query('search', '')),
+            (int) $request->query('page', 1),
+            (int) $request->query('limit', 25)
+        ));
+    }
+
+    public function asyncSuppliers(Request $request)
+    {
+        return response()->json($this->supplierOptionsPayload(
+            trim((string) $request->query('search', '')),
+            (int) $request->query('page', 1),
+            (int) $request->query('limit', 25)
+        ));
+    }
+
+    public function asyncSupplierProducts(Request $request)
+    {
+        return response()->json($this->supplierProductOptionsPayload(
+            trim((string) $request->query('search', '')),
+            (int) $request->query('page', 1),
+            (int) $request->query('limit', 25)
+        ));
     }
 
     public function store(string $module, Request $request)
@@ -948,36 +979,289 @@ class AdminController extends Controller
                 ->all();
         }
 
-        if (in_array($module, ['products', 'offers'], true) && Schema::hasTable('catalog_products')) {
-            $options['catalog_product_id'] = DB::table('catalog_products')
-                ->orderBy('name')
-                ->pluck('name', 'id')
-                ->all();
-        }
-
-        if (in_array($module, ['products', 'offers'], true) && Schema::hasTable('suppliers')) {
-            $options['supplier_id'] = DB::table('suppliers')
-                ->orderBy('business_name')
-                ->pluck('business_name', 'id')
-                ->all();
-        }
-
-        if ($module === 'offers' && Schema::hasTable('supplier_products')) {
-            $options['supplier_product_id'] = DB::table('supplier_products as sp')
-                ->leftJoin('catalog_products as cp', 'cp.id', '=', 'sp.catalog_product_id')
-                ->leftJoin('suppliers as s', 's.id', '=', 'sp.supplier_id')
-                ->select('sp.id', 'cp.name as product_name', 's.business_name', 'sp.price')
-                ->orderBy('cp.name')
-                ->get()
-                ->mapWithKeys(function ($product) {
-                    $label = trim(($product->product_name ?: 'Product #' . $product->id) . ' - ' . ($product->business_name ?: 'No supplier'), ' -');
-
-                    return [$product->id => $label . ' (' . AdminUi::money((float) $product->price) . ')'];
-                })
-                ->all();
-        }
-
         return $options;
+    }
+
+    private function asyncFieldConfigs(string $module): array
+    {
+        $configs = [];
+
+        if (in_array($module, ['products', 'offers'], true)) {
+            $configs['catalog_product_id'] = [
+                'endpoint' => route('admin.async.catalog-products'),
+                'search_placeholder' => __('panel.async.catalog_search_placeholder'),
+                'empty_label' => __('panel.async.catalog_empty_label'),
+                'empty_meta' => __('panel.async.catalog_empty_meta'),
+            ];
+            $configs['supplier_id'] = [
+                'endpoint' => route('admin.async.suppliers'),
+                'search_placeholder' => __('panel.async.supplier_search_placeholder'),
+                'empty_label' => __('panel.async.supplier_empty_label'),
+                'empty_meta' => __('panel.async.supplier_empty_meta'),
+            ];
+        }
+
+        if ($module === 'offers') {
+            $configs['supplier_product_id'] = [
+                'endpoint' => route('admin.async.supplier-products'),
+                'search_placeholder' => __('panel.async.supplier_product_search_placeholder'),
+                'empty_label' => __('panel.async.supplier_product_empty_label'),
+                'empty_meta' => __('panel.async.supplier_product_empty_meta'),
+            ];
+        }
+
+        return $configs;
+    }
+
+    private function selectedAsyncOptions(string $module, ?object $item): array
+    {
+        if (!$item) {
+            return [];
+        }
+
+        $selected = [];
+
+        if (in_array($module, ['products', 'offers'], true)) {
+            $catalogId = (int) data_get($item, 'catalog_product_id', 0);
+            if ($catalogId > 0) {
+                $selected['catalog_product_id'] = $this->selectedCatalogProductOption($catalogId);
+            }
+
+            $supplierId = (int) data_get($item, 'supplier_id', 0);
+            if ($supplierId > 0) {
+                $selected['supplier_id'] = $this->selectedSupplierOption($supplierId);
+            }
+        }
+
+        if ($module === 'offers') {
+            $supplierProductId = (int) data_get($item, 'supplier_product_id', 0);
+            if ($supplierProductId > 0) {
+                $selected['supplier_product_id'] = $this->selectedSupplierProductOption($supplierProductId);
+            }
+        }
+
+        return array_filter($selected);
+    }
+
+    private function catalogProductOptionsPayload(string $search = '', int $page = 1, int $limit = 25): array
+    {
+        $limit = max(1, min($limit, 50));
+        $page = max(1, $page);
+        $offset = ($page - 1) * $limit;
+
+        $query = DB::table('catalog_products as cp')
+            ->leftJoin('categories as c', 'c.id', '=', 'cp.category_id')
+            ->select([
+                'cp.id',
+                'cp.name',
+                'cp.category_id',
+                'cp.packaging',
+                'cp.unit_type',
+                'cp.slug',
+                'cp.status',
+                'c.name as category_name',
+            ]);
+
+        $this->applySearch($query, ['cp.name', 'cp.packaging', 'cp.unit_type', 'cp.slug', 'c.name'], $search);
+
+        $items = $query
+            ->orderBy('cp.name')
+            ->orderBy('cp.id')
+            ->offset($offset)
+            ->limit($limit + 1)
+            ->get()
+            ->map(fn ($item) => $this->normalizeCatalogProductOption($item));
+
+        return $this->paginatedAsyncResponse($items, $page, $limit);
+    }
+
+    private function supplierOptionsPayload(string $search = '', int $page = 1, int $limit = 25): array
+    {
+        $limit = max(1, min($limit, 50));
+        $page = max(1, $page);
+        $offset = ($page - 1) * $limit;
+
+        $query = DB::table('suppliers as s')
+            ->select([
+                's.id',
+                's.business_name',
+                's.owner_name',
+                's.city',
+                's.phone',
+                's.email',
+                's.status',
+            ]);
+
+        $this->applySearch($query, ['s.business_name', 's.owner_name', 's.phone', 's.city', 's.email'], $search);
+
+        $items = $query
+            ->orderBy('s.business_name')
+            ->orderBy('s.id')
+            ->offset($offset)
+            ->limit($limit + 1)
+            ->get()
+            ->map(fn ($item) => $this->normalizeSupplierOption($item));
+
+        return $this->paginatedAsyncResponse($items, $page, $limit);
+    }
+
+    private function supplierProductOptionsPayload(string $search = '', int $page = 1, int $limit = 25): array
+    {
+        $limit = max(1, min($limit, 50));
+        $page = max(1, $page);
+        $offset = ($page - 1) * $limit;
+
+        $query = DB::table('supplier_products as sp')
+            ->leftJoin('catalog_products as cp', 'cp.id', '=', 'sp.catalog_product_id')
+            ->leftJoin('suppliers as s', 's.id', '=', 'sp.supplier_id')
+            ->select([
+                'sp.id',
+                'sp.price',
+                'sp.status',
+                'cp.name as product_name',
+                's.business_name',
+            ]);
+
+        $this->applySearch($query, ['cp.name', 's.business_name'], $search);
+
+        $items = $query
+            ->orderBy('cp.name')
+            ->orderBy('sp.id')
+            ->offset($offset)
+            ->limit($limit + 1)
+            ->get()
+            ->map(fn ($item) => $this->normalizeSupplierProductOption($item));
+
+        return $this->paginatedAsyncResponse($items, $page, $limit);
+    }
+
+    private function paginatedAsyncResponse($items, int $page, int $limit): array
+    {
+        $hasMore = $items->count() > $limit;
+        $trimmedItems = $items->take($limit)->values()->all();
+
+        return [
+            'items' => $trimmedItems,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'has_more' => $hasMore,
+            ],
+        ];
+    }
+
+    private function selectedCatalogProductOption(int $id): ?array
+    {
+        $item = DB::table('catalog_products as cp')
+            ->leftJoin('categories as c', 'c.id', '=', 'cp.category_id')
+            ->select([
+                'cp.id',
+                'cp.name',
+                'cp.category_id',
+                'cp.packaging',
+                'cp.unit_type',
+                'cp.slug',
+                'cp.status',
+                'c.name as category_name',
+            ])
+            ->where('cp.id', $id)
+            ->first();
+
+        return $item ? $this->normalizeCatalogProductOption($item) : null;
+    }
+
+    private function selectedSupplierOption(int $id): ?array
+    {
+        $item = DB::table('suppliers as s')
+            ->select([
+                's.id',
+                's.business_name',
+                's.owner_name',
+                's.city',
+                's.phone',
+                's.email',
+                's.status',
+            ])
+            ->where('s.id', $id)
+            ->first();
+
+        return $item ? $this->normalizeSupplierOption($item) : null;
+    }
+
+    private function selectedSupplierProductOption(int $id): ?array
+    {
+        $item = DB::table('supplier_products as sp')
+            ->leftJoin('catalog_products as cp', 'cp.id', '=', 'sp.catalog_product_id')
+            ->leftJoin('suppliers as s', 's.id', '=', 'sp.supplier_id')
+            ->select([
+                'sp.id',
+                'sp.price',
+                'sp.status',
+                'cp.name as product_name',
+                's.business_name',
+            ])
+            ->where('sp.id', $id)
+            ->first();
+
+        return $item ? $this->normalizeSupplierProductOption($item) : null;
+    }
+
+    private function normalizeCatalogProductOption(object $item): array
+    {
+        $parts = array_filter([
+            $item->category_name ?? null,
+            $item->packaging ?? null,
+            $item->unit_type ?? null,
+            AdminUi::statusLabel($item->status ?? null),
+        ], fn ($value) => filled($value));
+
+        return [
+            'id' => (int) $item->id,
+            'label' => (string) $item->name,
+            'meta' => implode(' | ', $parts),
+            'name' => (string) $item->name,
+            'category_id' => $item->category_id !== null ? (int) $item->category_id : null,
+            'category_name' => $item->category_name,
+            'packaging' => $item->packaging,
+            'unit_type' => $item->unit_type,
+            'status' => $item->status,
+        ];
+    }
+
+    private function normalizeSupplierOption(object $item): array
+    {
+        $parts = array_filter([
+            $item->owner_name ?? null,
+            $item->city ?? null,
+            $item->phone ?? null,
+            AdminUi::statusLabel($item->status ?? null),
+        ], fn ($value) => filled($value));
+
+        return [
+            'id' => (int) $item->id,
+            'label' => (string) $item->business_name,
+            'meta' => implode(' | ', $parts),
+            'business_name' => $item->business_name,
+            'owner_name' => $item->owner_name,
+            'city' => $item->city,
+            'status' => $item->status,
+        ];
+    }
+
+    private function normalizeSupplierProductOption(object $item): array
+    {
+        $productName = (string) ($item->product_name ?: 'Product #' . $item->id);
+        $supplierName = (string) ($item->business_name ?: __('panel.dashboard.unassigned'));
+
+        return [
+            'id' => (int) $item->id,
+            'label' => trim($productName . ' - ' . $supplierName, ' -'),
+            'meta' => AdminUi::money((float) ($item->price ?? 0)) . ' | ' . AdminUi::statusLabel($item->status ?? null),
+            'product_name' => $item->product_name,
+            'business_name' => $item->business_name,
+            'price' => $item->price,
+            'status' => $item->status,
+        ];
     }
 
     private function settingsIndex(array $config)

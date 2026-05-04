@@ -867,6 +867,120 @@ code {
     box-shadow: 0 10px 24px rgba(239, 68, 68, 0.08);
 }
 
+.async-picker {
+    position: relative;
+}
+
+.async-picker__trigger {
+    width: 100%;
+    min-height: 54px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--white);
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    text-align: start;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.async-picker__trigger:hover {
+    border-color: #bfd0ef;
+}
+
+.async-picker__trigger:focus-visible,
+.async-picker.is-open .async-picker__trigger {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.12);
+    outline: none;
+}
+
+.async-picker__copy {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.async-picker__copy strong,
+.async-picker__option strong {
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.async-picker__copy small,
+.async-picker__option small,
+.async-picker__status,
+.async-picker__empty {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.async-picker__icon {
+    color: #71819f;
+    font-size: 13px;
+    flex: 0 0 auto;
+}
+
+.async-picker__panel {
+    position: absolute;
+    inset-inline: 0;
+    top: calc(100% + 8px);
+    z-index: 20;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 24px 44px rgba(20, 36, 58, 0.16);
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+}
+
+.async-picker__search-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+}
+
+.async-picker__search {
+    width: 100%;
+}
+
+.async-picker__clear {
+    white-space: nowrap;
+}
+
+.async-picker__results {
+    max-height: 260px;
+    overflow-y: auto;
+    display: grid;
+    gap: 8px;
+    padding-inline-end: 4px;
+}
+
+.async-picker__option,
+.async-picker__empty {
+    width: 100%;
+    border: 1px solid #e5edf8;
+    border-radius: 14px;
+    background: #fbfcff;
+    padding: 12px 13px;
+    text-align: start;
+}
+
+.async-picker__option:hover {
+    border-color: #bfd0ef;
+    background: #f7faff;
+}
+
+.async-picker__option.is-selected {
+    border-color: #9ebcff;
+    background: #eff5ff;
+}
+
 .form-field.is-checkbox {
     align-content: center;
 }
