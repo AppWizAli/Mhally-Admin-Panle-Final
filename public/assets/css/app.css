@@ -843,6 +843,7 @@ code {
 }
 
 .form-field {
+    position: relative;
     display: grid;
     gap: 8px;
     padding: 10px 12px 12px;
@@ -856,6 +857,10 @@ code {
     transform: translateY(-2px);
     border-color: #dbe6ff;
     box-shadow: 0 10px 25px rgba(45, 102, 245, 0.08);
+}
+
+.form-field.has-open-picker {
+    z-index: 30;
 }
 
 .form-field.has-error {
@@ -880,15 +885,55 @@ code {
     border-radius: 14px;
     background: #f8fbff;
     padding: 12px 14px;
-    display: grid;
-    gap: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     text-align: start;
+    cursor: pointer;
     transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
 }
 
 .async-picker__selected.is-selected {
     border-color: #c9dafc;
     background: #eef5ff;
+}
+
+.async-picker__selected-copy {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+    flex: 1 1 auto;
+}
+
+.async-picker__toggle {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: #5e7090;
+    background: rgba(214, 227, 250, 0.52);
+    transition: transform .18s ease, background-color .18s ease, color .18s ease;
+}
+
+.async-picker__toggle svg {
+    width: 18px;
+    height: 18px;
+}
+
+.async-picker.is-open .async-picker__selected {
+    border-color: #9ebcff;
+    box-shadow: 0 0 0 3px rgba(45, 102, 245, 0.12);
+    background: #fdfefe;
+}
+
+.async-picker.is-open .async-picker__toggle {
+    transform: rotate(180deg);
+    color: #2d66f5;
+    background: rgba(208, 222, 255, 0.9);
 }
 
 .async-picker__selected strong,
@@ -911,7 +956,7 @@ code {
     position: absolute;
     inset-inline: 0;
     top: calc(100% + 6px);
-    z-index: 60;
+    z-index: 80;
     background: var(--white);
     border: 1px solid var(--line);
     border-radius: 18px;
@@ -933,8 +978,6 @@ code {
 
 .async-picker__search {
     width: 100%;
-    position: relative;
-    z-index: 1;
 }
 
 .async-picker__clear {

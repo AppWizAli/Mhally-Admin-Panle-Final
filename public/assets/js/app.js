@@ -138,10 +138,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const closeAsyncPicker = (picker) => {
         const panel = picker.querySelector('[data-async-picker-panel]');
+        const selectedBox = picker.querySelector('[data-async-picker-selected]');
         if (panel) {
             panel.hidden = true;
         }
         picker.classList.remove('is-open');
+        picker.closest('.form-field')?.classList.remove('has-open-picker');
+        if (selectedBox) {
+            selectedBox.setAttribute('aria-expanded', 'false');
+        }
     };
 
     asyncPickers.forEach((picker) => {
@@ -283,6 +288,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             panel.hidden = false;
             picker.classList.add('is-open');
+            picker.closest('.form-field')?.classList.add('has-open-picker');
+            selectedBox.setAttribute('aria-expanded', 'true');
 
             if (!state.hasLoaded) {
                 loadItems(1);
@@ -290,8 +297,13 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         selectedBox.addEventListener('click', () => {
+            if (picker.classList.contains('is-open')) {
+                closeAsyncPicker(picker);
+                return;
+            }
+
             openPicker();
-            searchInput.focus();
+            window.setTimeout(() => searchInput.focus(), 0);
         });
 
         searchInput.addEventListener('focus', () => {
@@ -351,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderItems();
             closeAsyncPicker(picker);
             searchInput.value = '';
+            state.search = '';
         });
     });
 
