@@ -138,19 +138,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const closeAsyncPicker = (picker) => {
         const panel = picker.querySelector('[data-async-picker-panel]');
-        const trigger = picker.querySelector('[data-async-picker-trigger]');
         if (panel) {
             panel.hidden = true;
-        }
-        if (trigger) {
-            trigger.setAttribute('aria-expanded', 'false');
         }
         picker.classList.remove('is-open');
     };
 
     asyncPickers.forEach((picker) => {
         const hiddenInput = picker.querySelector('input[type="hidden"]');
-        const trigger = picker.querySelector('[data-async-picker-trigger]');
+        const selectedBox = picker.querySelector('[data-async-picker-selected]');
         const panel = picker.querySelector('[data-async-picker-panel]');
         const searchInput = picker.querySelector('[data-async-picker-search]');
         const results = picker.querySelector('[data-async-picker-results]');
@@ -159,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const meta = picker.querySelector('[data-async-picker-meta]');
         const clearButton = picker.querySelector('[data-async-picker-clear]');
 
-        if (!hiddenInput || !trigger || !panel || !searchInput || !results || !status || !label || !meta) {
+        if (!hiddenInput || !selectedBox || !panel || !searchInput || !results || !status || !label || !meta) {
             return;
         }
 
@@ -193,17 +189,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 hiddenInput.value = '';
                 label.textContent = emptyLabel;
                 meta.textContent = emptyMeta;
+                selectedBox.classList.remove('is-selected');
             } else {
                 hiddenInput.value = String(item.id || '');
                 label.textContent = item.label || emptyLabel;
                 meta.textContent = item.meta || '';
+                selectedBox.classList.add('is-selected');
             }
 
             const wrapper = hiddenInput.closest('.form-field');
             if (wrapper) {
                 wrapper.classList.remove('has-error');
             }
-            trigger.classList.remove('is-invalid');
+            searchInput.classList.remove('is-invalid');
         };
 
         const renderItems = () => {
@@ -276,35 +274,42 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        trigger.addEventListener('click', () => {
-            const isOpen = !panel.hidden;
+        const openPicker = () => {
             asyncPickers.forEach((item) => {
                 if (item !== picker) {
                     closeAsyncPicker(item);
                 }
             });
 
-            if (isOpen) {
-                closeAsyncPicker(picker);
-                return;
-            }
-
             panel.hidden = false;
-            trigger.setAttribute('aria-expanded', 'true');
             picker.classList.add('is-open');
-            searchInput.focus();
 
             if (!state.hasLoaded) {
                 loadItems(1);
             }
+        };
+
+        selectedBox.addEventListener('click', () => {
+            openPicker();
+            searchInput.focus();
+        });
+
+        searchInput.addEventListener('focus', () => {
+            openPicker();
         });
 
         clearButton?.addEventListener('click', () => {
             setSelection(null);
-            closeAsyncPicker(picker);
+            searchInput.value = '';
+            state.search = '';
+            state.page = 1;
+            state.hasMore = true;
+            loadItems(1);
+            searchInput.focus();
         });
 
         searchInput.addEventListener('input', () => {
+            openPicker();
             window.clearTimeout(state.debounceId);
             state.debounceId = window.setTimeout(() => {
                 state.search = searchInput.value.trim();
@@ -312,6 +317,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.hasMore = true;
                 loadItems(1);
             }, 250);
+        });
+
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeAsyncPicker(picker);
+                searchInput.blur();
+            }
         });
 
         results.addEventListener('scroll', () => {
@@ -338,6 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setSelection(selected);
             renderItems();
             closeAsyncPicker(picker);
+            searchInput.value = '';
         });
     });
 

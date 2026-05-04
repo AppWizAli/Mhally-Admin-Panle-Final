@@ -110,18 +110,18 @@
                                             data-scroll-text="{{ __('panel.async.scroll_more') }}"
                                         >
                                             <input type="hidden" id="{{ $fieldId }}" name="{{ $field }}" value="{{ $selectedId }}">
-                                            <button type="button" class="async-picker__trigger {{ $inputClasses }}" data-async-picker-trigger {{ $hasError ? 'aria-invalid=true' : '' }}>
-                                                <span class="async-picker__copy">
+                                            <div class="async-picker__selected {{ $selectedId !== '' ? 'is-selected' : '' }}" data-async-picker-selected>
+                                                
                                                     <strong data-async-picker-label>{{ $selectedLabel }}</strong>
                                                     <small data-async-picker-meta>{{ $selectedMeta }}</small>
-                                                </span>
-                                                <span class="async-picker__icon" aria-hidden="true">▾</span>
-                                            </button>
-                                            <div class="async-picker__panel" data-async-picker-panel hidden>
-                                                <div class="async-picker__search-row">
-                                                    <input type="search" class="async-picker__search" data-async-picker-search placeholder="{{ $asyncConfig['search_placeholder'] }}">
+                                                
+                                                
+                                            </div>
+                                            <div class="async-picker__search-row">
+                                                    <input type="search" class="async-picker__search {{ $inputClasses }}" data-async-picker-search placeholder="{{ $asyncConfig['search_placeholder'] }}" {{ $hasError ? 'aria-invalid=true' : '' }}>
                                                     <button type="button" class="ghost-button async-picker__clear" data-async-picker-clear>{{ __('panel.async.clear') }}</button>
-                                                </div>
+                                            </div>
+                                            <div class="async-picker__panel" data-async-picker-panel hidden>
                                                 <div class="async-picker__results" data-async-picker-results></div>
                                                 <div class="async-picker__status" data-async-picker-status>{{ __('panel.async.search_prompt') }}</div>
                                             </div>

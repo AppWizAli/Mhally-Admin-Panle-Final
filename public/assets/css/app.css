@@ -869,48 +869,36 @@ code {
 
 .async-picker {
     position: relative;
+    display: grid;
+    gap: 10px;
 }
 
-.async-picker__trigger {
+.async-picker__selected {
     width: 100%;
     min-height: 54px;
     border: 1px solid var(--line);
     border-radius: 14px;
-    background: var(--white);
+    background: #f8fbff;
     padding: 12px 14px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    text-align: start;
-    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
-}
-
-.async-picker__trigger:hover {
-    border-color: #bfd0ef;
-}
-
-.async-picker__trigger:focus-visible,
-.async-picker.is-open .async-picker__trigger {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.12);
-    outline: none;
-}
-
-.async-picker__copy {
     display: grid;
     gap: 4px;
-    min-width: 0;
+    text-align: start;
+    transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
 }
 
-.async-picker__copy strong,
+.async-picker__selected.is-selected {
+    border-color: #c9dafc;
+    background: #eef5ff;
+}
+
+.async-picker__selected strong,
 .async-picker__option strong {
     color: var(--text);
     font-size: 14px;
     line-height: 1.4;
 }
 
-.async-picker__copy small,
+.async-picker__selected small,
 .async-picker__option small,
 .async-picker__status,
 .async-picker__empty {
@@ -919,24 +907,22 @@ code {
     line-height: 1.55;
 }
 
-.async-picker__icon {
-    color: #71819f;
-    font-size: 13px;
-    flex: 0 0 auto;
-}
-
 .async-picker__panel {
     position: absolute;
     inset-inline: 0;
-    top: calc(100% + 8px);
-    z-index: 20;
+    top: calc(100% + 6px);
+    z-index: 60;
     background: var(--white);
     border: 1px solid var(--line);
     border-radius: 18px;
     box-shadow: 0 24px 44px rgba(20, 36, 58, 0.16);
-    padding: 14px;
+    padding: 12px;
     display: grid;
-    gap: 12px;
+    gap: 10px;
+}
+
+.async-picker__panel[hidden] {
+    display: none !important;
 }
 
 .async-picker__search-row {
@@ -947,10 +933,13 @@ code {
 
 .async-picker__search {
     width: 100%;
+    position: relative;
+    z-index: 1;
 }
 
 .async-picker__clear {
     white-space: nowrap;
+    align-self: stretch;
 }
 
 .async-picker__results {
