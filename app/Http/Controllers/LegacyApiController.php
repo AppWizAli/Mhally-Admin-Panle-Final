@@ -354,6 +354,15 @@ class LegacyApiController extends Controller
                     $identity = $this->requireIdentity($request, 'supplier');
                     return $this->ok($this->supplierOrdersPayload((int) $identity['user_id']));
 
+                case 'supplier/orders/detail':
+                    $identity = $this->requireIdentity($request, 'supplier');
+                    $order = $this->findOrder((int) $this->value($request, 'order_id', 0));
+                    if (!$order || (int) $order['supplier_id'] !== (int) $identity['user_id']) {
+                        $this->fail('Order not found.', 404);
+                    }
+                    $order['delivery_address'] = $order['buyer_address'] ?? '';
+                    return $this->ok($order);
+
                 case 'supplier/orders/status':
                     $this->requireMethod($request, 'POST');
                     $identity = $this->requireIdentity($request, 'supplier');
@@ -1184,8 +1193,8 @@ class LegacyApiController extends Controller
 
     private function supplierOrdersPayload(int $supplierId): array
     {
-        return $this->rows(
-            'SELECT o.*, b.store_name, b.buyer_name,
+        $orders = $this->rows(
+            'SELECT o.*, b.store_name, b.buyer_name, b.city AS buyer_city, b.address AS buyer_address,
                     (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS item_count
              FROM orders o
              JOIN buyers b ON b.id = o.buyer_id
@@ -1193,6 +1202,13 @@ class LegacyApiController extends Controller
              ORDER BY o.order_date DESC',
             ['supplier_id' => $supplierId]
         );
+
+        foreach ($orders as &$order) {
+            $order['delivery_address'] = $order['buyer_address'] ?? '';
+            $order['items'] = $this->orderItemsPayload((int) $order['id']);
+        }
+
+        return $orders;
     }
 
     private function supplierEarningsPayload(int $supplierId): array
@@ -1301,7 +1317,7 @@ class LegacyApiController extends Controller
     private function findOrder(int $id): ?array
     {
         $order = $this->row(
-            'SELECT o.*, b.store_name, b.buyer_name, b.phone AS buyer_phone, b.city AS buyer_city,
+            'SELECT o.*, b.store_name, b.buyer_name, b.phone AS buyer_phone, b.city AS buyer_city, b.address AS buyer_address,
                     s.business_name, s.owner_name, s.phone AS supplier_phone
              FROM orders o
              JOIN buyers b ON b.id = o.buyer_id
@@ -1312,19 +1328,32 @@ class LegacyApiController extends Controller
         if (!$order) {
             return null;
         }
-        $order['items'] = $this->rows(
-            'SELECT oi.*, sp.sku
-             FROM order_items oi
-             LEFT JOIN supplier_products sp ON sp.id = oi.supplier_product_id
-             WHERE oi.order_id = :order_id
-             ORDER BY oi.id ASC',
-            ['order_id' => $id]
-        );
+        $order['delivery_address'] = $order['buyer_address'] ?? '';
+        $order['items'] = $this->orderItemsPayload($id);
         $order['chat_thread_id'] = (int) DB::table('chat_threads')
             ->where('buyer_id', (int) $order['buyer_id'])
             ->where('supplier_id', (int) $order['supplier_id'])
             ->value('id');
         return $order;
+    }
+
+    private function orderItemsPayload(int $orderId): array
+    {
+        return $this->rows(
+            'SELECT oi.supplier_product_id,
+                    COALESCE(NULLIF(oi.product_name, ""), cp.name, "Product item") AS product_name,
+                    COALESCE(NULLIF(oi.unit_label, ""), cp.unit_type, "") AS unit_label,
+                    oi.quantity,
+                    oi.unit_price,
+                    oi.line_total,
+                    sp.sku
+             FROM order_items oi
+             LEFT JOIN supplier_products sp ON sp.id = oi.supplier_product_id
+             LEFT JOIN catalog_products cp ON cp.id = sp.catalog_product_id
+             WHERE oi.order_id = :order_id
+             ORDER BY oi.id ASC',
+            ['order_id' => $orderId]
+        );
     }
 
     private function findThread(int $id): ?array
