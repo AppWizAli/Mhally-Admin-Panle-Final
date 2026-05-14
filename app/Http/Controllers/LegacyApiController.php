@@ -186,6 +186,14 @@ class LegacyApiController extends Controller
                     $identity = $this->requireIdentity($request, 'buyer');
                     return $this->ok($this->buyerOrdersPayload((int) $identity['user_id']));
 
+                case 'buyer/orders/detail':
+                    $identity = $this->requireIdentity($request, 'buyer');
+                    $order = $this->findOrder((int) $this->value($request, 'order_id', 0));
+                    if (!$order || (int) $order['buyer_id'] !== (int) $identity['user_id']) {
+                        $this->fail('Order not found.', 404);
+                    }
+                    return $this->ok($order);
+
                 case 'buyer/profile':
                     $identity = $this->requireIdentity($request, 'buyer');
                     $buyer = $this->findBuyer((int) $identity['user_id']);
@@ -1343,6 +1351,7 @@ class LegacyApiController extends Controller
             'SELECT oi.supplier_product_id,
                     COALESCE(NULLIF(oi.product_name, ""), cp.name, "Product item") AS product_name,
                     COALESCE(NULLIF(oi.unit_label, ""), cp.unit_type, "") AS unit_label,
+                    cp.packaging,
                     oi.quantity,
                     oi.unit_price,
                     oi.line_total,
