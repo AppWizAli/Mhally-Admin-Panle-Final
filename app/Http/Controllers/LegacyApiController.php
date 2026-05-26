@@ -126,12 +126,12 @@ class LegacyApiController extends Controller
                         $buyer = $this->findBuyer((int) $identity['user_id']);
                         $city = (string) ($buyer['city'] ?? $city);
                     }
-                    return $this->ok($this->allSuppliers([
+                    return $this->ok($this->allSuppliers(array_merge([
                         'search' => (string) $this->value($request, 'search', ''),
                         'status' => 'active',
                         'city' => $city,
                         'sort' => (string) $this->value($request, 'sort', 'default'),
-                    ]));
+                    ], $this->paginationParams($request, 50, 100))));
 
                 case 'buyer/products':
                     $city = (string) $this->value($request, 'city', '');
@@ -139,14 +139,14 @@ class LegacyApiController extends Controller
                         $buyer = $this->findBuyer((int) $identity['user_id']);
                         $city = (string) ($buyer['city'] ?? $city);
                     }
-                    return $this->ok($this->allProductListings([
+                    return $this->ok($this->allProductListings(array_merge([
                         'search' => (string) $this->value($request, 'search', ''),
                         'status' => 'active',
                         'supplier_id' => (int) $this->value($request, 'supplier_id', 0),
                         'category_id' => (int) $this->value($request, 'category_id', 0),
                         'city' => $city,
                         'sort' => (string) $this->value($request, 'sort', 'default'),
-                    ]));
+                    ], $this->paginationParams($request, 50, 100))));
 
                 case 'buyer/offers':
                     $city = (string) $this->value($request, 'city', '');
@@ -158,7 +158,7 @@ class LegacyApiController extends Controller
 
                 case 'buyer/notifications':
                     $identity = $this->requireIdentity($request, 'buyer');
-                    return $this->ok($this->buyerNotificationsPayload((int) $identity['user_id']));
+                    return $this->ok($this->buyerNotificationsPayload((int) $identity['user_id'], $this->paginationParams($request, 30, 100)));
 
                 case 'buyer/notifications/register-device':
                     $this->requireMethod($request, 'POST');
@@ -184,7 +184,7 @@ class LegacyApiController extends Controller
 
                 case 'buyer/orders':
                     $identity = $this->requireIdentity($request, 'buyer');
-                    return $this->ok($this->buyerOrdersPayload((int) $identity['user_id']));
+                    return $this->ok($this->buyerOrdersPayload((int) $identity['user_id'], $this->paginationParams($request, 20, 50)));
 
                 case 'buyer/orders/detail':
                     $identity = $this->requireIdentity($request, 'buyer');
@@ -229,7 +229,7 @@ class LegacyApiController extends Controller
 
                 case 'buyer/chats':
                     $identity = $this->requireIdentity($request, 'buyer');
-                    return $this->ok($this->buyerChatsPayload((int) $identity['user_id']));
+                    return $this->ok($this->buyerChatsPayload((int) $identity['user_id'], $this->paginationParams($request, 30, 50)));
 
                 case 'buyer/chats/start':
                     $this->requireMethod($request, 'POST');
@@ -321,7 +321,7 @@ class LegacyApiController extends Controller
                     return $this->ok($this->findSupplier((int) $supplier['id']), 'Supplier profile updated.');
 
                 case 'supplier/catalog':
-                    return $this->ok($this->supplierCatalogPayload());
+                    return $this->ok($this->supplierCatalogPayload($this->paginationParams($request, 50, 100)));
 
                 case 'supplier/catalog/bulk-upload':
                     $this->requireMethod($request, 'POST');
@@ -330,7 +330,7 @@ class LegacyApiController extends Controller
 
                 case 'supplier/products':
                     $identity = $this->requireIdentity($request, 'supplier');
-                    return $this->ok($this->supplierProductsPayload((int) $identity['user_id']));
+                    return $this->ok($this->supplierProductsPayload((int) $identity['user_id'], $this->paginationParams($request, 50, 100)));
 
                 case 'supplier/products/create':
                 case 'supplier/products/update':
@@ -360,7 +360,7 @@ class LegacyApiController extends Controller
 
                 case 'supplier/orders':
                     $identity = $this->requireIdentity($request, 'supplier');
-                    return $this->ok($this->supplierOrdersPayload((int) $identity['user_id']));
+                    return $this->ok($this->supplierOrdersPayload((int) $identity['user_id'], $this->paginationParams($request, 20, 50)));
 
                 case 'supplier/orders/detail':
                     $identity = $this->requireIdentity($request, 'supplier');
@@ -382,7 +382,7 @@ class LegacyApiController extends Controller
 
                 case 'supplier/messages':
                     $identity = $this->requireIdentity($request, 'supplier');
-                    return $this->ok($this->supplierMessagesPayload((int) $identity['user_id']));
+                    return $this->ok($this->supplierMessagesPayload((int) $identity['user_id'], $this->paginationParams($request, 30, 50)));
 
                 case 'supplier/messages/thread':
                     $identity = $this->requireIdentity($request, 'supplier');
@@ -946,6 +946,7 @@ class LegacyApiController extends Controller
         $status = (string) ($filters['status'] ?? '');
         $city = trim((string) ($filters['city'] ?? ''));
         $sort = strtolower(trim((string) ($filters['sort'] ?? 'default')));
+        $limitSql = $this->limitSql($filters);
         $orderBy = match ($sort) {
             'cheapest' => 'COALESCE(lowest_price, 99999999) ASC, s.minimum_order_amount ASC, s.business_name ASC',
             'low_min_order' => 's.minimum_order_amount ASC, COALESCE(lowest_price, 99999999) ASC, s.business_name ASC',
@@ -978,7 +979,7 @@ class LegacyApiController extends Controller
                 ))
                AND (:status = "" OR s.status = :status)
                AND (:city = "" OR s.city = :city)
-             ORDER BY ' . $orderBy,
+             ORDER BY ' . $orderBy . $limitSql,
             ['search' => $search, 'like' => '%' . $search . '%', 'status' => $status, 'city' => $city]
         );
     }
@@ -991,6 +992,7 @@ class LegacyApiController extends Controller
         $categoryId = (int) ($filters['category_id'] ?? 0);
         $city = trim((string) ($filters['city'] ?? ''));
         $sort = strtolower(trim((string) ($filters['sort'] ?? 'default')));
+        $limitSql = $this->limitSql($filters);
         $offerJoin = $this->activeOfferJoinSql('sp', 'ao');
         $effectivePrice = $this->effectivePriceSql('sp', 'ao');
         $orderBy = match ($sort) {
@@ -1020,7 +1022,7 @@ class LegacyApiController extends Controller
                AND (:supplier_id = 0 OR sp.supplier_id = :supplier_id)
                AND (:category_id = 0 OR cp.category_id = :category_id)
                AND (:city = "" OR s.city = :city)
-             ORDER BY ' . $orderBy,
+             ORDER BY ' . $orderBy . $limitSql,
             [
                 'search' => $search,
                 'like' => '%' . $search . '%',
@@ -1096,42 +1098,44 @@ class LegacyApiController extends Controller
         );
     }
 
-    private function buyerNotificationsPayload(int $buyerId): array
+    private function buyerNotificationsPayload(int $buyerId, array $pagination = []): array
     {
         $buyer = $this->findBuyer($buyerId);
         $city = trim((string) ($buyer['city'] ?? ''));
+        $limitSql = $this->limitSql($pagination);
 
         return $this->rows(
             'SELECT * FROM app_notifications
              WHERE status = "active"
                AND (target_type = "all" OR (target_type = "city" AND target_value = :city) OR (target_type = "buyer" AND target_value = :buyer_id))
-             ORDER BY created_at DESC, id DESC
-             LIMIT 100',
+             ORDER BY created_at DESC, id DESC' . $limitSql,
             ['city' => $city, 'buyer_id' => (string) $buyerId]
         );
     }
 
-    private function buyerOrdersPayload(int $buyerId): array
+    private function buyerOrdersPayload(int $buyerId, array $pagination = []): array
     {
+        $limitSql = $this->limitSql($pagination);
         return $this->rows(
             'SELECT o.*, s.business_name,
                     (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS item_count
              FROM orders o
              JOIN suppliers s ON s.id = o.supplier_id
              WHERE o.buyer_id = :buyer_id
-             ORDER BY o.order_date DESC',
+             ORDER BY o.order_date DESC' . $limitSql,
             ['buyer_id' => $buyerId]
         );
     }
 
-    private function buyerChatsPayload(int $buyerId): array
+    private function buyerChatsPayload(int $buyerId, array $pagination = []): array
     {
+        $limitSql = $this->limitSql($pagination);
         return $this->rows(
             'SELECT t.*, s.business_name, s.owner_name
              FROM chat_threads t
              JOIN suppliers s ON s.id = t.supplier_id
              WHERE t.buyer_id = :buyer_id
-             ORDER BY t.last_message_at DESC',
+             ORDER BY t.last_message_at DESC' . $limitSql,
             ['buyer_id' => $buyerId]
         );
     }
@@ -1170,10 +1174,14 @@ class LegacyApiController extends Controller
         ];
     }
 
-    private function supplierProductsPayload(int $supplierId): array
+    private function supplierProductsPayload(int $supplierId, array $pagination = []): array
     {
+        $limitSql = $this->limitSql($pagination);
         return $this->rows(
-            'SELECT sp.*, cp.name, cp.packaging, cp.unit_type, cp.emoji, cp.image_url, c.name AS category_name,
+            'SELECT sp.id, sp.catalog_product_id, sp.supplier_id, sp.sku, sp.price, sp.stock_quantity,
+                    sp.min_order_qty, sp.min_order_amount, sp.delivery_time, sp.status, sp.is_featured,
+                    sp.created_at, sp.updated_at,
+                    cp.name, cp.packaging, cp.unit_type, cp.emoji, cp.image_url, c.name AS category_name,
                     ao.id AS active_offer_id,
                     ao.offer_price,
                     ao.maximum_quantity,
@@ -1183,31 +1191,34 @@ class LegacyApiController extends Controller
              LEFT JOIN categories c ON c.id = cp.category_id
              ' . $this->activeOfferJoinSql('sp', 'ao') . '
              WHERE sp.supplier_id = :supplier_id
-             ORDER BY cp.name ASC',
+             ORDER BY cp.name ASC' . $limitSql,
             ['supplier_id' => $supplierId]
         );
     }
 
-    private function supplierCatalogPayload(): array
+    private function supplierCatalogPayload(array $pagination = []): array
     {
+        $limitSql = $this->limitSql($pagination);
         return $this->rows(
-            'SELECT cp.*, c.name AS category_name
+            'SELECT cp.id, cp.category_id, cp.name, cp.slug, cp.emoji, cp.packaging,
+                    cp.unit_type, cp.image_url, cp.status, c.name AS category_name
              FROM catalog_products cp
              LEFT JOIN categories c ON c.id = cp.category_id
              WHERE cp.status = "active"
-             ORDER BY c.name ASC, cp.name ASC'
+             ORDER BY c.name ASC, cp.name ASC' . $limitSql
         );
     }
 
-    private function supplierOrdersPayload(int $supplierId): array
+    private function supplierOrdersPayload(int $supplierId, array $pagination = []): array
     {
+        $limitSql = $this->limitSql($pagination);
         $orders = $this->rows(
             'SELECT o.*, b.store_name, b.buyer_name, b.city AS buyer_city, b.address AS buyer_address,
                     (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS item_count
              FROM orders o
              JOIN buyers b ON b.id = o.buyer_id
              WHERE o.supplier_id = :supplier_id
-             ORDER BY o.order_date DESC',
+             ORDER BY o.order_date DESC' . $limitSql,
             ['supplier_id' => $supplierId]
         );
 
@@ -1238,14 +1249,15 @@ class LegacyApiController extends Controller
         ];
     }
 
-    private function supplierMessagesPayload(int $supplierId): array
+    private function supplierMessagesPayload(int $supplierId, array $pagination = []): array
     {
+        $limitSql = $this->limitSql($pagination);
         return $this->rows(
             'SELECT t.*, b.store_name, b.buyer_name
              FROM chat_threads t
              JOIN buyers b ON b.id = t.buyer_id
              WHERE t.supplier_id = :supplier_id
-             ORDER BY t.last_message_at DESC',
+             ORDER BY t.last_message_at DESC' . $limitSql,
             ['supplier_id' => $supplierId]
         );
     }
@@ -1990,6 +2002,29 @@ class LegacyApiController extends Controller
         $formatted = rtrim(rtrim(number_format($amount, 2, '.', ''), '0'), '.');
 
         return $formatted . ' ' . $currency;
+    }
+
+    private function paginationParams(Request $request, int $defaultLimit = 50, int $maxLimit = 100): array
+    {
+        $page = max(1, (int) $this->value($request, 'page', 1));
+        $limit = max(1, min($maxLimit, (int) $this->value($request, 'limit', $defaultLimit)));
+
+        return [
+            'page' => $page,
+            'limit' => $limit,
+            'offset' => ($page - 1) * $limit,
+        ];
+    }
+
+    private function limitSql(array $pagination): string
+    {
+        $limit = (int) ($pagination['limit'] ?? 0);
+        if ($limit <= 0) {
+            return '';
+        }
+
+        $offset = max(0, (int) ($pagination['offset'] ?? 0));
+        return ' LIMIT ' . $limit . ' OFFSET ' . $offset;
     }
 
     private function referralProgramEnabled(): bool
