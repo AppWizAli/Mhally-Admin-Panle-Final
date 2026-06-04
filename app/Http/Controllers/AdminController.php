@@ -6,6 +6,7 @@ use App\Support\AdminUi;
 use App\Support\CatalogProductBulkImporter;
 use App\Support\ProductBulkImporter;
 use App\Support\PushNotifications;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -85,6 +86,8 @@ class AdminController extends Controller
             'pending_suppliers' => $this->count('suppliers', 'pending'),
         ];
 
+        $catalogHierarchy = $this->dashboardHierarchy();
+
         $recentOrderColumns = [
             'o.id',
             'o.order_number',
@@ -130,7 +133,120 @@ class AdminController extends Controller
             ->limit(6)
             ->get();
 
-        return view('admin.dashboard', compact('counts', 'recentOrders', 'lowStock'));
+        return view('admin.dashboard', compact('counts', 'recentOrders', 'lowStock', 'catalogHierarchy'));
+    }
+
+    private function dashboardHierarchy(): array
+    {
+        return Cache::remember('admin.dashboard.catalog_hierarchy', now()->addMinutes(10), function () {
+            $categories = DB::table('categories as c')
+                ->select([
+                    'c.id',
+                    'c.name',
+                    'c.slug',
+                    'c.icon',
+                    'c.description',
+                    'c.accent_color',
+                    'c.sort_order',
+                    'c.status',
+                ])
+                ->selectSub(
+                    DB::table('catalog_products as cp')
+                        ->selectRaw('COUNT(*)')
+                        ->whereColumn('cp.category_id', 'c.id'),
+                    'catalog_count'
+                )
+                ->selectSub(
+                    DB::table('supplier_products as sp')
+                        ->join('catalog_products as cp2', 'cp2.id', '=', 'sp.catalog_product_id')
+                        ->selectRaw('COUNT(*)')
+                        ->whereColumn('cp2.category_id', 'c.id'),
+                    'listing_count'
+                )
+                ->orderBy('c.sort_order')
+                ->orderBy('c.name')
+                ->get();
+
+            $catalogRows = DB::table('catalog_products as cp')
+                ->leftJoin('categories as c', 'c.id', '=', 'cp.category_id')
+                ->select([
+                    'cp.id',
+                    'cp.category_id',
+                    'cp.name',
+                    'cp.slug',
+                    'cp.emoji',
+                    'cp.packaging',
+                    'cp.unit_type',
+                    'cp.image_url',
+                    'cp.status',
+                    'c.name as category_name',
+                ])
+                ->selectSub(
+                    DB::table('supplier_products as sp')
+                        ->selectRaw('COUNT(*)')
+                        ->whereColumn('sp.catalog_product_id', 'cp.id'),
+                    'product_count'
+                )
+                ->orderByRaw('COALESCE(c.sort_order, 999999) asc')
+                ->orderBy('c.name')
+                ->orderByDesc('product_count')
+                ->orderBy('cp.name')
+                ->get();
+
+            $catalogPreviewByCategory = $catalogRows
+                ->groupBy('category_id')
+                ->map(fn ($rows) => $rows->take(5)->values());
+
+            $catalogIds = $catalogPreviewByCategory
+                ->flatten(1)
+                ->pluck('id')
+                ->filter()
+                ->values()
+                ->all();
+
+            $productsByCatalog = collect();
+            if (!empty($catalogIds)) {
+                $productsByCatalog = DB::table('supplier_products as sp')
+                    ->join('catalog_products as cp', 'cp.id', '=', 'sp.catalog_product_id')
+                    ->leftJoin('suppliers as s', 's.id', '=', 'sp.supplier_id')
+                    ->select([
+                        'sp.id',
+                        'sp.catalog_product_id',
+                        'sp.supplier_id',
+                        'sp.price',
+                        'sp.stock_quantity',
+                        'sp.min_order_qty',
+                        'sp.status',
+                        's.business_name as supplier_name',
+                        's.owner_name as supplier_owner_name',
+                        'cp.name as catalog_name',
+                    ])
+                    ->whereIn('sp.catalog_product_id', $catalogIds)
+                    ->orderBy('sp.catalog_product_id')
+                    ->orderByDesc('sp.status')
+                    ->orderBy('s.business_name')
+                    ->get()
+                    ->groupBy('catalog_product_id')
+                    ->map(fn ($rows) => $rows->take(3)->values());
+            }
+
+            $categories = $categories->map(function ($category) use ($catalogPreviewByCategory, $productsByCatalog) {
+                $catalogs = $catalogPreviewByCategory->get($category->id, collect())->map(function ($catalog) use ($productsByCatalog) {
+                    $catalog->products = $productsByCatalog->get($catalog->id, collect())->values();
+                    return $catalog;
+                })->values();
+
+                $category->catalogs = $catalogs;
+                $category->preview_catalog_count = $catalogs->count();
+                return $category;
+            });
+
+            return [
+                'categories' => $categories,
+                'category_total' => $categories->count(),
+                'catalog_total' => $catalogRows->count(),
+            ];
+        });
     }
 
     public function index(string $module, Request $request)

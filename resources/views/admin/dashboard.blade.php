@@ -66,6 +66,82 @@
         </article>
     </section>
 
+    <section class="panel hierarchy-panel">
+        <div class="page-block__header">
+            <div>
+                <h3>{{ __('panel.nav.categories') }} / {{ __('panel.nav.catalog_products') }} / {{ __('panel.nav.products') }}</h3>
+                <p>Browse the marketplace structure by category, then inspect the catalog products and their live supplier products.</p>
+            </div>
+            <div class="hierarchy-summary">
+                <span class="count-chip">{{ number_format((int) ($catalogHierarchy['category_total'] ?? 0)) }} categories</span>
+                <span class="count-chip">{{ number_format((int) ($catalogHierarchy['catalog_total'] ?? 0)) }} catalogs</span>
+            </div>
+        </div>
+
+        <div class="hierarchy-list">
+            @forelse(($catalogHierarchy['categories'] ?? []) as $category)
+                <details class="hierarchy-category" @if($loop->first) open @endif>
+                    <summary class="hierarchy-category__summary">
+                        <div class="hierarchy-category__title">
+                            <strong>{{ $category->name }}</strong>
+                            <small>{{ AdminUi::displayValue($category->description) }}</small>
+                        </div>
+                        <div class="hierarchy-category__meta">
+                            <span class="count-chip">{{ number_format((int) ($category->catalog_count ?? 0)) }} catalogs</span>
+                            <span class="count-chip">{{ number_format((int) ($category->listing_count ?? 0)) }} products</span>
+                            <span class="status-chip {{ AdminUi::statusBadgeClass($category->status) }}">{{ AdminUi::statusLabel($category->status) }}</span>
+                        </div>
+                    </summary>
+
+                    <div class="hierarchy-category__body">
+                        <div class="hierarchy-catalog-grid">
+                            @forelse($category->catalogs as $catalog)
+                                <article class="hierarchy-catalog">
+                                    <div class="hierarchy-catalog__head">
+                                        <div>
+                                            <strong>{{ $catalog->name }}</strong>
+                                            <small>{{ trim(($catalog->packaging ?: '') . ' ' . ($catalog->unit_type ?: '')) }}</small>
+                                        </div>
+                                        <span class="status-chip {{ AdminUi::statusBadgeClass($catalog->status) }}">{{ AdminUi::statusLabel($catalog->status) }}</span>
+                                    </div>
+
+                                    <div class="hierarchy-catalog__meta">
+                                        <span>{{ number_format((int) ($catalog->product_count ?? 0)) }} products</span>
+                                        <span>{{ AdminUi::displayValue($catalog->category_name ?? $category->name) }}</span>
+                                    </div>
+
+                                    <div class="hierarchy-product-list">
+                                        @forelse($catalog->products as $product)
+                                            <div class="hierarchy-product-row">
+                                                <div>
+                                                    <strong>{{ $product->supplier_name ?: ($product->supplier_owner_name ?: __('panel.common.not_available')) }}</strong>
+                                                    <small>{{ AdminUi::money($product->price) }} &middot; {{ number_format((int) ($product->stock_quantity ?? 0)) }} stock</small>
+                                                </div>
+                                                <span class="status-chip {{ AdminUi::statusBadgeClass($product->status) }}">{{ AdminUi::statusLabel($product->status) }}</span>
+                                            </div>
+                                        @empty
+                                            <div class="hierarchy-empty">No supplier products are linked to this catalog yet.</div>
+                                        @endforelse
+                                    </div>
+
+                                    <div class="hierarchy-actions">
+                                        <a class="inline-link" href="{{ route('admin.module.index', ['module' => 'catalog_products', 'search' => $category->name]) }}">Open all catalogs</a>
+                                        <a class="inline-link" href="{{ route('admin.module.show', ['catalog_products', $catalog->id]) }}">View catalog</a>
+                                        <a class="inline-link" href="{{ route('admin.module.index', ['module' => 'products', 'search' => $catalog->name]) }}">View products</a>
+                                    </div>
+                                </article>
+                            @empty
+                                <div class="hierarchy-empty">This category currently has no catalog products in the dashboard preview.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </details>
+            @empty
+                <div class="hierarchy-empty">No categories were found in the marketplace database.</div>
+            @endforelse
+        </div>
+    </section>
+
     <section class="dashboard-grid">
         <article class="panel">
             <div class="page-block__header">
