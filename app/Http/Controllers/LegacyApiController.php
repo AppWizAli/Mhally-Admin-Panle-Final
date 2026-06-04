@@ -1204,7 +1204,6 @@ class LegacyApiController extends Controller
                     cp.unit_type, cp.image_url, cp.status, c.name AS category_name
              FROM catalog_products cp
              LEFT JOIN categories c ON c.id = cp.category_id
-             WHERE cp.status = "active"
              ORDER BY c.name ASC, cp.name ASC' . $limitSql
         );
     }
