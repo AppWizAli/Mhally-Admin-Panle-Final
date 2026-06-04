@@ -321,7 +321,10 @@ class LegacyApiController extends Controller
                     return $this->ok($this->findSupplier((int) $supplier['id']), 'Supplier profile updated.');
 
                 case 'supplier/catalog':
-                    return $this->ok($this->supplierCatalogPayload($this->paginationParams($request, 50, 100)));
+                    return $this->ok($this->supplierCatalogPayload(
+                        $this->paginationParams($request, 50, 100),
+                        (int) $this->value($request, 'category_id', 0)
+                    ));
 
                 case 'supplier/catalog/bulk-upload':
                     $this->requireMethod($request, 'POST');
@@ -1196,15 +1199,18 @@ class LegacyApiController extends Controller
         );
     }
 
-    private function supplierCatalogPayload(array $pagination = []): array
+    private function supplierCatalogPayload(array $pagination = [], int $categoryId = 0): array
     {
         $limitSql = $this->limitSql($pagination);
+        $categorySql = $categoryId > 0 ? ' WHERE cp.category_id = :category_id' : '';
         return $this->rows(
             'SELECT cp.id, cp.category_id, cp.name, cp.slug, cp.emoji, cp.packaging,
                     cp.unit_type, cp.image_url, cp.status, c.name AS category_name
              FROM catalog_products cp
              LEFT JOIN categories c ON c.id = cp.category_id
-             ORDER BY c.name ASC, cp.name ASC' . $limitSql
+             ' . $categorySql . '
+             ORDER BY c.name ASC, cp.name ASC' . $limitSql,
+            $categoryId > 0 ? ['category_id' => $categoryId] : []
         );
     }
 
