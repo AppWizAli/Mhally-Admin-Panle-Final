@@ -37,8 +37,8 @@ class LegacyApiController extends Controller
 
                 case 'auth/buyer/register':
                     $this->requireMethod($request, 'POST');
-                    $email = trim((string) $this->value($request, 'email', ''));
-                    if ($email !== '' && $this->findBuyerByEmail($email)) {
+                    $email = $this->nullableEmail($this->value($request, 'email', null));
+                    if ($email !== null && $this->findBuyerByEmail($email)) {
                         $this->fail('Buyer email already exists.');
                     }
                     $buyerId = $this->persist('buyers', [
@@ -74,8 +74,8 @@ class LegacyApiController extends Controller
 
                 case 'auth/supplier/register':
                     $this->requireMethod($request, 'POST');
-                    $email = trim((string) $this->value($request, 'email', ''));
-                    if ($email !== '' && $this->findSupplierByEmail($email)) {
+                    $email = $this->nullableEmail($this->value($request, 'email', null));
+                    if ($email !== null && $this->findSupplierByEmail($email)) {
                         $this->fail('Supplier email already exists.');
                     }
                     $supplierId = $this->persist('suppliers', [
@@ -440,8 +440,8 @@ class LegacyApiController extends Controller
                 $this->fail('A buyer account already exists for this phone number.');
             }
 
-            $email = trim((string) $this->value($request, 'email', ''));
-            if ($purpose === 'register' && $email !== '' && $this->findBuyerByEmail($email)) {
+            $email = $this->nullableEmail($this->value($request, 'email', null));
+            if ($purpose === 'register' && $email !== null && $this->findBuyerByEmail($email)) {
                 $this->fail('Buyer email already exists.');
             }
 
@@ -467,8 +467,8 @@ class LegacyApiController extends Controller
                 $this->fail('A supplier account already exists for this phone number.');
             }
 
-            $email = trim((string) $this->value($request, 'email', ''));
-            if ($purpose === 'register' && $email !== '' && $this->findSupplierByEmail($email)) {
+            $email = $this->nullableEmail($this->value($request, 'email', null));
+            if ($purpose === 'register' && $email !== null && $this->findSupplierByEmail($email)) {
                 $this->fail('Supplier email already exists.');
             }
 
@@ -530,7 +530,7 @@ class LegacyApiController extends Controller
                 }
             } else {
                 $email = (string) ($payload['email'] ?? '');
-                if ($email !== '' && $this->findBuyerByEmail($email)) {
+                if ($email !== null && $this->findBuyerByEmail($email)) {
                     $this->fail('Buyer email already exists.');
                 }
                 $buyerId = $this->persist('buyers', [
@@ -566,7 +566,7 @@ class LegacyApiController extends Controller
             }
         } else {
             $email = (string) ($payload['email'] ?? '');
-            if ($email !== '' && $this->findSupplierByEmail($email)) {
+            if ($email !== null && $this->findSupplierByEmail($email)) {
                 $this->fail('Supplier email already exists.');
             }
             $supplierId = $this->persist('suppliers', [
@@ -605,8 +605,8 @@ class LegacyApiController extends Controller
     {
         $listingId = (int) $this->value($request, 'listing_id', 0);
         $catalogId = (int) $this->value($request, 'catalog_product_id', 0);
+        $existingListing = $listingId > 0 ? $this->findListing($listingId) : null;
         if ($listingId > 0 && $catalogId === 0) {
-            $existingListing = $this->findListing($listingId);
             if ($existingListing) {
                 $catalogId = (int) $existingListing['catalog_id'];
             }
@@ -614,6 +614,20 @@ class LegacyApiController extends Controller
         if ($catalogId === 0) {
             $this->fail('catalog_product_id is required.');
         }
+
+        $resolvedPrice = $this->optionalFloat($request, 'price', isset($existingListing['price']) ? (float) $existingListing['price'] : 0);
+        if ($resolvedPrice <= 0) {
+            $this->fail('price is required.');
+        }
+        $resolvedStock = $this->optionalInt($request, 'stock_quantity', isset($existingListing['stock_quantity']) ? (int) $existingListing['stock_quantity'] : 0);
+        $resolvedDeliveryTime = $this->optionalString($request, 'delivery_time', (string) ($existingListing['delivery_time'] ?? '24-48 hours'));
+        $resolvedStatus = $this->optionalString($request, 'status', (string) ($existingListing['status'] ?? 'active'));
+        $resolvedSku = $this->optionalString($request, 'sku', (string) ($existingListing['sku'] ?? ''));
+        if ($resolvedSku === null || $resolvedSku === '') {
+            $resolvedSku = 'SKU-' . strtoupper(substr(md5((string) microtime()), 0, 8));
+        }
+        $resolvedMinOrderQty = $this->optionalInt($request, 'min_order_qty', isset($existingListing['min_order_qty']) ? (int) $existingListing['min_order_qty'] : (int) $this->value($request, 'min_order_qty', 1));
+        $resolvedMinOrderAmount = $this->optionalFloat($request, 'min_order_amount', isset($existingListing['min_order_amount']) ? (float) $existingListing['min_order_amount'] : (float) $this->value($request, 'min_order_amount', 0));
 
         $imageDataUrl = (string) $this->value($request, 'image_data_url', '');
         $imageUrl = trim((string) $this->value($request, 'image_url', ''));
@@ -637,13 +651,13 @@ class LegacyApiController extends Controller
         $payload = [
             'catalog_product_id' => $catalogId,
             'supplier_id' => $supplierId,
-            'sku' => (string) $this->value($request, 'sku', 'SKU-' . strtoupper(substr(md5((string) microtime()), 0, 8))),
-            'price' => (float) $this->value($request, 'price', 0),
-            'stock_quantity' => (int) $this->value($request, 'stock_quantity', 0),
-            'min_order_qty' => (int) $this->value($request, 'min_order_qty', 1),
-            'min_order_amount' => (float) $this->value($request, 'min_order_amount', 0),
-            'delivery_time' => (string) $this->value($request, 'delivery_time', '24-48 hours'),
-            'status' => (string) $this->value($request, 'status', 'active'),
+            'sku' => $resolvedSku,
+            'price' => $resolvedPrice,
+            'stock_quantity' => $resolvedStock,
+            'min_order_qty' => $resolvedMinOrderQty,
+            'min_order_amount' => $resolvedMinOrderAmount,
+            'delivery_time' => $resolvedDeliveryTime,
+            'status' => $resolvedStatus,
             'is_featured' => (int) $this->value($request, 'is_featured', 0),
             'updated_at' => now(),
         ];
@@ -858,23 +872,36 @@ class LegacyApiController extends Controller
         if (!$thread || (int) $thread[$column] !== $userId) {
             $this->fail('Thread not found.', 404);
         }
+        $messageType = strtolower((string) $this->value($request, 'message_type', 'text'));
+        $voiceDuration = trim((string) $this->value($request, 'voice_duration', ''));
         $body = trim((string) $this->value($request, 'message_body', ''));
-        if ($body === '') {
+        if ($messageType === 'voice') {
+            $voiceDataUrl = trim((string) $this->value($request, 'voice_data_url', ''));
+            if ($voiceDataUrl === '') {
+                $this->fail('voice_data_url is required for voice messages.');
+            }
+            $body = $this->storeDataUrlAudio($voiceDataUrl, 'chat_voice');
+        } elseif ($body === '') {
             $this->fail('message_body is required.');
         }
 
         $senderName = $senderType === 'buyer' ? (string) $thread['store_name'] : (string) $thread['business_name'];
-        $this->persist('chat_messages', [
+        $payload = [
             'thread_id' => $threadId,
             'sender_type' => $senderType,
             'sender_name' => $senderName,
             'message_body' => $body,
-            'message_type' => (string) $this->value($request, 'message_type', 'text'),
+            'message_type' => $messageType,
             'created_at' => now(),
-        ]);
+        ];
+        if (Schema::hasColumn('chat_messages', 'voice_duration')) {
+            $payload['voice_duration'] = $messageType === 'voice' ? $voiceDuration : null;
+        }
+        $this->persist('chat_messages', $payload);
 
+        $lastMessage = $messageType === 'voice' ? 'Voice message' : $body;
         $updates = [
-            'last_message' => $body,
+            'last_message' => $lastMessage,
             'last_message_at' => now(),
             'updated_at' => now(),
         ];
@@ -892,14 +919,14 @@ class LegacyApiController extends Controller
             PushNotifications::notifySupplier(
                 (int) $thread['supplier_id'],
                 'New buyer message',
-                $senderName . ': ' . Str::limit($body, 80),
+                $senderName . ': ' . Str::limit($lastMessage, 80),
                 ['navigate_to' => 'supplier_messages', 'link_type' => 'chat', 'link_value' => (string) $threadId]
             );
         } else {
             PushNotifications::notifyBuyer(
                 (int) $thread['buyer_id'],
                 'New supplier message',
-                $senderName . ': ' . Str::limit($body, 80),
+                $senderName . ': ' . Str::limit($lastMessage, 80),
                 ['navigate_to' => 'chats', 'link_type' => 'chat', 'link_value' => (string) $threadId]
             );
         }
@@ -2177,6 +2204,36 @@ class LegacyApiController extends Controller
         return (float) $value;
     }
 
+    private function nullableEmail($value): ?string
+    {
+        $email = trim((string) $value);
+        return $email === '' ? null : $email;
+    }
+
+    private function optionalString(Request $request, string $key, ?string $default = null): ?string
+    {
+        $value = trim((string) $this->value($request, $key, ''));
+        return $value === '' ? $default : $value;
+    }
+
+    private function optionalInt(Request $request, string $key, ?int $default = null): ?int
+    {
+        $value = trim((string) $this->value($request, $key, ''));
+        if ($value === '') {
+            return $default;
+        }
+        return is_numeric($value) ? (int) $value : $default;
+    }
+
+    private function optionalFloat(Request $request, string $key, ?float $default = null): ?float
+    {
+        $value = trim((string) $this->value($request, $key, ''));
+        if ($value === '') {
+            return $default;
+        }
+        return is_numeric($value) ? (float) $value : $default;
+    }
+
     private function storeDataUrlImage(string $dataUrl, string $folder): string
     {
         if (!preg_match('/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/i', $dataUrl, $matches)) {
@@ -2187,6 +2244,31 @@ class LegacyApiController extends Controller
         if ($binary === false) {
             throw new RuntimeException('Invalid image data.');
         }
+        $directory = public_path('uploads/' . trim($folder, '/'));
+        if (!is_dir($directory)) {
+            mkdir($directory, 0775, true);
+        }
+        $filename = Str::uuid() . '.' . $extension;
+        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, $binary);
+        return '/uploads/' . trim($folder, '/') . '/' . $filename;
+    }
+
+    private function storeDataUrlAudio(string $dataUrl, string $folder): string
+    {
+        if (!preg_match('/^data:(audio\/[a-z0-9.+-]+);base64,(.+)$/i', $dataUrl, $matches)) {
+            throw new RuntimeException('Invalid audio data.');
+        }
+        $mimeType = strtolower($matches[1]);
+        $binary = base64_decode($matches[2], true);
+        if ($binary === false) {
+            throw new RuntimeException('Invalid audio data.');
+        }
+        $extension = match (true) {
+            str_contains($mimeType, 'mpeg') => 'mp3',
+            str_contains($mimeType, 'm4a') || str_contains($mimeType, 'mp4') => 'm4a',
+            str_contains($mimeType, 'aac') => 'aac',
+            default => 'm4a',
+        };
         $directory = public_path('uploads/' . trim($folder, '/'));
         if (!is_dir($directory)) {
             mkdir($directory, 0775, true);
