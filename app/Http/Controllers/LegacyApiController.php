@@ -37,14 +37,10 @@ class LegacyApiController extends Controller
 
                 case 'auth/buyer/register':
                     $this->requireMethod($request, 'POST');
-                    $email = $this->nullableEmail($this->value($request, 'email', null));
-                    if ($email !== null && $this->findBuyerByEmail($email)) {
-                        $this->fail('Buyer email already exists.');
-                    }
                     $buyerId = $this->persist('buyers', [
                         'store_name' => (string) $this->value($request, 'store_name', ''),
                         'buyer_name' => (string) $this->value($request, 'buyer_name', ''),
-                        'email' => $email,
+                        'email' => null,
                         'phone' => $this->normalizePhone((string) $this->value($request, 'phone', '')),
                         'city' => (string) $this->value($request, 'city', ''),
                         'address' => (string) $this->value($request, 'address', ''),
@@ -74,14 +70,10 @@ class LegacyApiController extends Controller
 
                 case 'auth/supplier/register':
                     $this->requireMethod($request, 'POST');
-                    $email = $this->nullableEmail($this->value($request, 'email', null));
-                    if ($email !== null && $this->findSupplierByEmail($email)) {
-                        $this->fail('Supplier email already exists.');
-                    }
                     $supplierId = $this->persist('suppliers', [
                         'business_name' => (string) $this->value($request, 'business_name', ''),
                         'owner_name' => (string) $this->value($request, 'owner_name', ''),
-                        'email' => $email,
+                        'email' => null,
                         'phone' => $this->normalizePhone((string) $this->value($request, 'phone', '')),
                         'city' => (string) $this->value($request, 'city', ''),
                         'address' => (string) $this->value($request, 'address', ''),
@@ -122,10 +114,6 @@ class LegacyApiController extends Controller
 
                 case 'buyer/suppliers':
                     $city = (string) $this->value($request, 'city', '');
-                    if ($identity = $this->identity($request, 'buyer')) {
-                        $buyer = $this->findBuyer((int) $identity['user_id']);
-                        $city = (string) ($buyer['city'] ?? $city);
-                    }
                     return $this->ok($this->allSuppliers(array_merge([
                         'search' => (string) $this->value($request, 'search', ''),
                         'status' => 'active',
@@ -200,7 +188,7 @@ class LegacyApiController extends Controller
                     if (!$buyer) {
                         $this->fail('Buyer not found.', 404);
                     }
-                    return $this->ok($buyer);
+                    return $this->ok($this->buyerPublicPayload($buyer));
 
                 case 'buyer/profile/update':
                     $this->requireMethod($request, 'POST');
@@ -212,7 +200,6 @@ class LegacyApiController extends Controller
                     $this->persist('buyers', [
                         'store_name' => (string) $this->value($request, 'store_name', $buyer['store_name']),
                         'buyer_name' => (string) $this->value($request, 'buyer_name', $buyer['buyer_name']),
-                        'email' => (string) $this->value($request, 'email', $buyer['email']),
                         'phone' => $this->normalizePhone((string) $this->value($request, 'phone', $buyer['phone'])),
                         'city' => (string) $this->value($request, 'city', $buyer['city']),
                         'address' => (string) $this->value($request, 'address', $buyer['address'] ?? ''),
@@ -225,7 +212,7 @@ class LegacyApiController extends Controller
                         'created_at' => (string) $buyer['created_at'],
                         'updated_at' => now(),
                     ], (int) $buyer['id']);
-                    return $this->ok($this->findBuyer((int) $buyer['id']), 'Buyer profile updated.');
+                    return $this->ok($this->buyerPublicPayload($this->findBuyer((int) $buyer['id'])), 'Buyer profile updated.');
 
                 case 'buyer/chats':
                     $identity = $this->requireIdentity($request, 'buyer');
@@ -287,7 +274,7 @@ class LegacyApiController extends Controller
                     if (!$supplier) {
                         $this->fail('Supplier not found.', 404);
                     }
-                    return $this->ok($supplier);
+                    return $this->ok($this->supplierPublicPayload($supplier));
 
                 case 'supplier/profile/update':
                     $this->requireMethod($request, 'POST');
@@ -299,7 +286,6 @@ class LegacyApiController extends Controller
                     $this->persist('suppliers', [
                         'business_name' => (string) $this->value($request, 'business_name', $supplier['business_name']),
                         'owner_name' => (string) $this->value($request, 'owner_name', $supplier['owner_name']),
-                        'email' => (string) $this->value($request, 'email', $supplier['email']),
                         'phone' => $this->normalizePhone((string) $this->value($request, 'phone', $supplier['phone'])),
                         'city' => (string) $this->value($request, 'city', $supplier['city']),
                         'address' => (string) $this->value($request, 'address', $supplier['address']),
@@ -318,7 +304,7 @@ class LegacyApiController extends Controller
                         'created_at' => (string) $supplier['created_at'],
                         'updated_at' => now(),
                     ], (int) $supplier['id']);
-                    return $this->ok($this->findSupplier((int) $supplier['id']), 'Supplier profile updated.');
+                    return $this->ok($this->supplierPublicPayload($this->findSupplier((int) $supplier['id'])), 'Supplier profile updated.');
 
                 case 'supplier/catalog':
                     return $this->ok($this->supplierCatalogPayload(
@@ -440,16 +426,10 @@ class LegacyApiController extends Controller
                 $this->fail('A buyer account already exists for this phone number.');
             }
 
-            $email = $this->nullableEmail($this->value($request, 'email', null));
-            if ($purpose === 'register' && $email !== null && $this->findBuyerByEmail($email)) {
-                $this->fail('Buyer email already exists.');
-            }
-
             $payload = $purpose === 'register'
                 ? [
                     'store_name' => (string) $this->value($request, 'store_name', ''),
                     'buyer_name' => (string) $this->value($request, 'buyer_name', $this->value($request, 'store_name', '')),
-                    'email' => $email,
                     'phone' => $phone,
                     'city' => (string) $this->value($request, 'city', ''),
                     'address' => (string) $this->value($request, 'address', ''),
@@ -467,16 +447,10 @@ class LegacyApiController extends Controller
                 $this->fail('A supplier account already exists for this phone number.');
             }
 
-            $email = $this->nullableEmail($this->value($request, 'email', null));
-            if ($purpose === 'register' && $email !== null && $this->findSupplierByEmail($email)) {
-                $this->fail('Supplier email already exists.');
-            }
-
             $payload = $purpose === 'register'
                 ? [
                     'business_name' => (string) $this->value($request, 'business_name', ''),
                     'owner_name' => (string) $this->value($request, 'owner_name', ''),
-                    'email' => $email,
                     'phone' => $phone,
                     'city' => (string) $this->value($request, 'city', ''),
                     'address' => (string) $this->value($request, 'address', ''),
@@ -529,14 +503,10 @@ class LegacyApiController extends Controller
                     $this->fail('Buyer account not found.', 404);
                 }
             } else {
-                $email = (string) ($payload['email'] ?? '');
-                if ($email !== null && $this->findBuyerByEmail($email)) {
-                    $this->fail('Buyer email already exists.');
-                }
                 $buyerId = $this->persist('buyers', [
                     'store_name' => (string) ($payload['store_name'] ?? ''),
                     'buyer_name' => (string) ($payload['buyer_name'] ?? ($payload['store_name'] ?? '')),
-                    'email' => $email,
+                    'email' => null,
                     'phone' => $phone,
                     'city' => (string) ($payload['city'] ?? ''),
                     'address' => (string) ($payload['address'] ?? ''),
@@ -565,14 +535,10 @@ class LegacyApiController extends Controller
                 $this->fail('Supplier account not found.', 404);
             }
         } else {
-            $email = (string) ($payload['email'] ?? '');
-            if ($email !== null && $this->findSupplierByEmail($email)) {
-                $this->fail('Supplier email already exists.');
-            }
             $supplierId = $this->persist('suppliers', [
                 'business_name' => (string) ($payload['business_name'] ?? ''),
                 'owner_name' => (string) ($payload['owner_name'] ?? ''),
-                'email' => $email,
+                'email' => null,
                 'phone' => $phone,
                 'city' => (string) ($payload['city'] ?? ''),
                 'address' => (string) ($payload['address'] ?? ''),
@@ -996,7 +962,6 @@ class LegacyApiController extends Controller
              WHERE (:search = ""
                 OR s.business_name LIKE :like
                 OR s.owner_name LIKE :like
-                OR s.email LIKE :like
                 OR s.city LIKE :like
                 OR EXISTS (
                     SELECT 1 FROM supplier_products sp2
@@ -2088,27 +2053,37 @@ class LegacyApiController extends Controller
 
     private function buyerAuthPayload(array $buyer): array
     {
+        return $this->buyerPublicPayload($buyer) + [
+            'preferred_language' => $buyer['preferred_language'],
+        ];
+    }
+
+    private function buyerPublicPayload(array $buyer): array
+    {
         return [
             'id' => (int) $buyer['id'],
             'store_name' => $buyer['store_name'],
             'buyer_name' => $buyer['buyer_name'],
-            'email' => $buyer['email'],
             'phone' => $buyer['phone'] ?? '',
             'city' => $buyer['city'],
-            'preferred_language' => $buyer['preferred_language'],
         ];
     }
 
     private function supplierAuthPayload(array $supplier): array
     {
+        return $this->supplierPublicPayload($supplier) + [
+            'status' => $supplier['status'],
+        ];
+    }
+
+    private function supplierPublicPayload(array $supplier): array
+    {
         return [
             'id' => (int) $supplier['id'],
             'business_name' => $supplier['business_name'],
             'owner_name' => $supplier['owner_name'],
-            'email' => $supplier['email'],
             'phone' => $supplier['phone'] ?? '',
             'city' => $supplier['city'],
-            'status' => $supplier['status'],
         ];
     }
 

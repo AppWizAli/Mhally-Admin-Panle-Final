@@ -27,7 +27,6 @@ return [
             'fields' => [
                 'business_name' => 'text',
                 'owner_name' => 'text',
-                'email' => 'email',
                 'phone' => 'text',
                 'city' => 'text',
                 'address' => 'textarea',
@@ -51,7 +50,6 @@ return [
             'fields' => [
                 'store_name' => 'text',
                 'buyer_name' => 'text',
-                'email' => 'email',
                 'phone' => 'text',
                 'city' => 'text',
                 'address' => 'textarea',

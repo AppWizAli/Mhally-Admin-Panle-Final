@@ -818,14 +818,12 @@ class AdminController extends Controller
             'buyers' => [
                 $add('store_name', ['required', 'string', 'max:150']),
                 $add('buyer_name', ['required', 'string', 'max:120']),
-                $add('email', ['required', 'email', 'max:180', Rule::unique($table, 'email')->ignore($id)]),
                 $add('phone', ['nullable', 'string', 'max:40']),
                 $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'inactive', 'blocked'])]),
             ],
             'suppliers' => [
                 $add('business_name', ['required', 'string', 'max:160']),
                 $add('owner_name', ['required', 'string', 'max:120']),
-                $add('email', ['required', 'email', 'max:180', Rule::unique($table, 'email')->ignore($id)]),
                 $add('phone', ['nullable', 'string', 'max:40']),
                 $add('status', ['required', Rule::in($config['fields']['status'] ?? ['pending', 'active', 'suspended'])]),
             ],
@@ -1204,11 +1202,10 @@ class AdminController extends Controller
                 's.owner_name',
                 's.city',
                 's.phone',
-                's.email',
                 's.status',
             ]);
 
-        $this->applySearch($query, ['s.business_name', 's.owner_name', 's.phone', 's.city', 's.email'], $search);
+        $this->applySearch($query, ['s.business_name', 's.owner_name', 's.phone', 's.city'], $search);
 
         $items = $query
             ->orderBy('s.business_name')
@@ -1547,7 +1544,7 @@ class AdminController extends Controller
                 'lowest_price'
             );
 
-        $this->applySearch($query, ['s.business_name', 's.owner_name', 's.email', 's.phone', 's.city'], $search);
+        $this->applySearch($query, ['s.business_name', 's.owner_name', 's.phone', 's.city'], $search);
         if ($status !== '') {
             $query->where('s.status', $status);
         }
@@ -1575,7 +1572,7 @@ class AdminController extends Controller
                 'spend_total'
             );
 
-        $this->applySearch($query, ['b.store_name', 'b.buyer_name', 'b.email', 'b.phone', 'b.city'], $search);
+        $this->applySearch($query, ['b.store_name', 'b.buyer_name', 'b.phone', 'b.city'], $search);
         if ($status !== '') {
             $query->where('b.status', $status);
         }
