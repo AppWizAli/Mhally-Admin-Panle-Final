@@ -123,10 +123,6 @@ class LegacyApiController extends Controller
 
                 case 'buyer/products':
                     $city = (string) $this->value($request, 'city', '');
-                    if ($identity = $this->identity($request, 'buyer')) {
-                        $buyer = $this->findBuyer((int) $identity['user_id']);
-                        $city = (string) ($buyer['city'] ?? $city);
-                    }
                     return $this->ok($this->allProductListings(array_merge([
                         'search' => (string) $this->value($request, 'search', ''),
                         'status' => 'active',
