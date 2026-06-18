@@ -40,7 +40,7 @@ class LegacyApiController extends Controller
                     $buyerId = $this->persist('buyers', [
                         'store_name' => (string) $this->value($request, 'store_name', ''),
                         'buyer_name' => (string) $this->value($request, 'buyer_name', ''),
-                        'email' => null,
+                        'email' => $this->generatedAppEmail('buyer', (string) $this->value($request, 'phone', '')),
                         'phone' => $this->normalizePhone((string) $this->value($request, 'phone', '')),
                         'city' => (string) $this->value($request, 'city', ''),
                         'address' => (string) $this->value($request, 'address', ''),
@@ -73,7 +73,7 @@ class LegacyApiController extends Controller
                     $supplierId = $this->persist('suppliers', [
                         'business_name' => (string) $this->value($request, 'business_name', ''),
                         'owner_name' => (string) $this->value($request, 'owner_name', ''),
-                        'email' => null,
+                        'email' => $this->generatedAppEmail('supplier', (string) $this->value($request, 'phone', '')),
                         'phone' => $this->normalizePhone((string) $this->value($request, 'phone', '')),
                         'city' => (string) $this->value($request, 'city', ''),
                         'address' => (string) $this->value($request, 'address', ''),
@@ -506,7 +506,7 @@ class LegacyApiController extends Controller
                 $buyerId = $this->persist('buyers', [
                     'store_name' => (string) ($payload['store_name'] ?? ''),
                     'buyer_name' => (string) ($payload['buyer_name'] ?? ($payload['store_name'] ?? '')),
-                    'email' => null,
+                    'email' => $this->generatedAppEmail('buyer', $phone),
                     'phone' => $phone,
                     'city' => (string) ($payload['city'] ?? ''),
                     'address' => (string) ($payload['address'] ?? ''),
@@ -538,7 +538,7 @@ class LegacyApiController extends Controller
             $supplierId = $this->persist('suppliers', [
                 'business_name' => (string) ($payload['business_name'] ?? ''),
                 'owner_name' => (string) ($payload['owner_name'] ?? ''),
-                'email' => null,
+                'email' => $this->generatedAppEmail('supplier', $phone),
                 'phone' => $phone,
                 'city' => (string) ($payload['city'] ?? ''),
                 'address' => (string) ($payload['address'] ?? ''),
@@ -1909,6 +1909,12 @@ class LegacyApiController extends Controller
         ];
     }
 
+    private function generatedAppEmail(string $role, string $phone): string
+    {
+        $normalized = preg_replace('/[^0-9]+/', '', $phone) ?: (string) Str::uuid();
+        return $role . '+' . $normalized . '@muhalli.local';
+    }
+
     private function findBuyerByEmail(string $email): ?array
     {
         return $this->row('SELECT * FROM buyers WHERE email = :email LIMIT 1', ['email' => $email]);
@@ -2253,3 +2259,5 @@ class LegacyApiController extends Controller
         return '/uploads/' . trim($folder, '/') . '/' . $filename;
     }
 }
+
+

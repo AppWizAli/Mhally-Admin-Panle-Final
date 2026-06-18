@@ -916,6 +916,7 @@ class AdminController extends Controller
     private function applyModuleDefaults(string $module, string $table, array $data): array
     {
         if ($module === 'buyers') {
+            $this->setDefault($table, $data, 'email', fn () => $this->generatedModuleEmail('buyer', $data));
             $this->setDefault($table, $data, 'password_hash', fn () => Hash::make(Str::random(32)));
             $this->setDefault($table, $data, 'member_since', fn () => now()->toDateString());
             $this->setDefault($table, $data, 'preferred_language', 'en');
@@ -923,6 +924,7 @@ class AdminController extends Controller
         }
 
         if ($module === 'suppliers') {
+            $this->setDefault($table, $data, 'email', fn () => $this->generatedModuleEmail('supplier', $data));
             $this->setDefault($table, $data, 'password_hash', fn () => Hash::make(Str::random(32)));
             $this->setDefault($table, $data, 'minimum_order_quantity', 1);
             $this->setDefault($table, $data, 'minimum_order_amount', 0);
@@ -955,6 +957,13 @@ class AdminController extends Controller
         }
 
         return $data;
+    }
+
+    private function generatedModuleEmail(string $role, array $data): string
+    {
+        $phone = preg_replace('/[^0-9]+/', '', (string) ($data['phone'] ?? ''));
+        $seed = $phone !== '' ? $phone : Str::uuid()->toString();
+        return $role . '+' . $seed . '@muhalli.local';
     }
 
     private function setDefault(string $table, array &$data, string $field, $value): void
@@ -2098,3 +2107,6 @@ class AdminController extends Controller
         });
     }
 }
+
+
+
