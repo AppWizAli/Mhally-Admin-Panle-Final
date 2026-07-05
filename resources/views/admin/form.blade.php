@@ -70,6 +70,7 @@
                                     'supplier_id' => 'suppliers',
                                     'supplier_product_id' => 'products',
                                     'category_id' => 'categories',
+                                    'parent_id' => 'categories',
                                 ][$field] ?? null;
                                 $fieldId = $module . '_' . $field;
                                 $hasError = $errors->has($field);

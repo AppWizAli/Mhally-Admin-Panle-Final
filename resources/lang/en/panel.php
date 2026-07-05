@@ -209,6 +209,8 @@ return [
         'supplier_id' => 'Supplier',
         'supplier_product_id' => 'Supplier Product',
         'category_id' => 'Category',
+        'parent_id' => 'Parent Category',
+        'parent_name' => 'Parent Category',
         'icon' => 'Icon Image',
         'emoji' => 'Emoji Image',
         'image_url' => 'Image',
@@ -365,5 +367,6 @@ return [
         'bulk_delete_no_items' => 'Select at least one record before deleting.',
         'bulk_delete_blocked' => 'Some :title records could not be deleted because they are linked to other marketplace data.',
         'deleted_many' => ':count :title records deleted.',
+        'category_parent_has_children' => 'This category already has subcategories, so it cannot be moved under another category. Move or reassign its subcategories first.',
     ],
 ];

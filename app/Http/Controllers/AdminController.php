@@ -310,7 +310,7 @@ class AdminController extends Controller
         $config = $this->module($module);
         $item = DB::table($config['table'])->where('id', $id)->first();
         abort_if(!$item, 404);
-        $fieldOptions = $this->fieldOptions($module);
+        $fieldOptions = $this->fieldOptions($module, $id);
         $asyncFieldConfigs = $this->asyncFieldConfigs($module);
         $selectedAsyncOptions = $this->selectedAsyncOptions($module, $item);
         $requiredFields = $this->requiredFieldMap($this->validationRules($module, $config, $id));
@@ -855,6 +855,7 @@ class AdminController extends Controller
             ],
             'categories' => [
                 $add('name', ['required', 'string', 'max:120']),
+                $add('parent_id', $this->categoryParentIdRules($id)),
                 $add('icon', ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048']),
                 $add('status', ['required', Rule::in($config['fields']['status'] ?? ['active', 'draft', 'archived'])]),
             ],
@@ -865,6 +866,29 @@ class AdminController extends Controller
             ],
             default => null,
         };
+
+        return $rules;
+    }
+
+    private function categoryParentIdRules(?int $id): array
+    {
+        $rules = [
+            'nullable',
+            'integer',
+            Rule::exists('categories', 'id')->whereNull('parent_id'),
+        ];
+
+        if ($id) {
+            $rules[] = Rule::notIn([$id]);
+            $rules[] = function (string $attribute, $value, \Closure $fail) use ($id) {
+                if ($value === null || $value === '') {
+                    return;
+                }
+                if (DB::table('categories')->where('parent_id', $id)->exists()) {
+                    $fail(__('panel.messages.category_parent_has_children'));
+                }
+            };
+        }
 
         return $rules;
     }
@@ -891,6 +915,8 @@ class AdminController extends Controller
             'supplier_product_id.exists' => 'The selected supplier product does not exist.',
             'category_id.required' => 'Select a category before saving.',
             'category_id.exists' => 'The selected category does not exist.',
+            'parent_id.exists' => 'Choose a primary category as the parent. Subcategories cannot be nested further.',
+            'parent_id.not_in' => 'A category cannot be set as its own parent.',
             'email.unique' => 'This email already exists.',
             'icon.image' => 'Choose a valid icon image file.',
             'icon.mimes' => 'The icon image must be a JPG, PNG, or WEBP file.',
@@ -1091,12 +1117,21 @@ class AdminController extends Controller
         return $title . ' could not be saved because of a server/database issue. Error ID: ' . $errorId;
     }
 
-    private function fieldOptions(string $module): array
+    private function fieldOptions(string $module, ?int $excludeId = null): array
     {
         $options = [];
 
         if (in_array($module, ['catalog_products'], true) && Schema::hasTable('categories')) {
             $options['category_id'] = DB::table('categories')
+                ->orderBy('name')
+                ->pluck('name', 'id')
+                ->all();
+        }
+
+        if ($module === 'categories' && Schema::hasColumn('categories', 'parent_id')) {
+            $options['parent_id'] = DB::table('categories')
+                ->whereNull('parent_id')
+                ->when($excludeId, fn ($query) => $query->where('id', '!=', $excludeId))
                 ->orderBy('name')
                 ->pluck('name', 'id')
                 ->all();
@@ -1514,6 +1549,11 @@ class AdminController extends Controller
                     ->whereColumn('cp2.category_id', 'c.id'),
                 'listing_count'
             );
+
+        if (Schema::hasColumn('categories', 'parent_id')) {
+            $query->leftJoin('categories as parent', 'parent.id', '=', 'c.parent_id')
+                ->addSelect('parent.name as parent_name');
+        }
 
         $this->applySearch($query, ['c.name', 'c.description', 'c.slug'], $search);
         if ($status !== '') {
@@ -2061,6 +2101,28 @@ class AdminController extends Controller
                 'title' => 'Messages',
                 'subtitle' => 'Conversation history inside this thread.',
                 'columns' => ['sender_name', 'sender_type', 'message_body', 'created_at'],
+                'rows' => $rows,
+            ];
+        }
+
+        if ($module === 'categories' && Schema::hasColumn('categories', 'parent_id')) {
+            $rows = DB::table('categories as sub')
+                ->select(['sub.id', 'sub.name', 'sub.slug', 'sub.sort_order', 'sub.status'])
+                ->selectSub(
+                    DB::table('catalog_products as cp')
+                        ->selectRaw('COUNT(*)')
+                        ->whereColumn('cp.category_id', 'sub.id'),
+                    'catalog_count'
+                )
+                ->where('sub.parent_id', $item->id)
+                ->orderBy('sub.sort_order')
+                ->orderBy('sub.name')
+                ->get();
+
+            $blocks[] = [
+                'title' => 'Subcategories',
+                'subtitle' => $rows->count() . ' subcategories nested under this category.',
+                'columns' => ['name', 'slug', 'catalog_count', 'sort_order', 'status'],
                 'rows' => $rows,
             ];
         }

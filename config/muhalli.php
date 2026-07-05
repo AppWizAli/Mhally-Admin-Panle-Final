@@ -6,11 +6,12 @@ return [
             'title' => 'Categories',
             'table' => 'categories',
             'order' => ['c.sort_order', 'asc'],
-            'list' => ['name', 'description', 'catalog_count', 'listing_count', 'sort_order', 'status'],
+            'list' => ['name', 'parent_name', 'description', 'catalog_count', 'listing_count', 'sort_order', 'status'],
             'form_help' => 'Organize product and supplier catalog flow with clean category management.',
             'fields' => [
                 'name' => 'text',
                 'slug' => 'text',
+                'parent_id' => 'number',
                 'icon' => 'file',
                 'description' => 'textarea',
                 'accent_color' => 'color',
