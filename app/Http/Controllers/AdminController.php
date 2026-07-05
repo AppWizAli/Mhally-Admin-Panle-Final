@@ -20,6 +20,9 @@ use Throwable;
 
 class AdminController extends Controller
 {
+    private const CATEGORY_PARENTS_ONLY = -1;
+    private const CATEGORY_UNASSIGNED = -2;
+
     public function loginForm()
     {
         return view('auth.login');
@@ -267,8 +270,14 @@ class AdminController extends Controller
         $view = trim((string) $request->query('view', ''));
 
         $categoryHierarchyEnabled = $module === 'categories' && Schema::hasColumn('categories', 'parent_id');
-        $showAllSubcategories = $categoryHierarchyEnabled && $parentId === 0 && $view === 'subcategories';
-        $queryParentFilter = $parentId > 0 ? $parentId : ($showAllSubcategories ? -1 : 0);
+        $isUnassignedView = $categoryHierarchyEnabled && $parentId === 0 && $view === 'unassigned';
+
+        $queryParentFilter = 0;
+        if ($parentId > 0) {
+            $queryParentFilter = $parentId;
+        } elseif ($categoryHierarchyEnabled) {
+            $queryParentFilter = $isUnassignedView ? self::CATEGORY_UNASSIGNED : self::CATEGORY_PARENTS_ONLY;
+        }
 
         $query = $this->moduleIndexQuery($module, $search, $status, $city, $queryParentFilter);
         $items = $query->orderBy($orderColumn, $direction)->paginate(20)->withQueryString();
@@ -282,14 +291,14 @@ class AdminController extends Controller
         $categoryViewCounts = [];
         if ($categoryHierarchyEnabled && $parentId === 0) {
             $categoryViewCounts = [
-                'main' => DB::table('categories')->whereNull('parent_id')->count(),
-                'subcategories' => DB::table('categories')->whereNotNull('parent_id')->count(),
+                'parents' => $this->categoryHasChildrenQuery()->count(),
+                'unassigned' => $this->categoryHasChildrenQuery(true)->count(),
             ];
         }
 
         return view('admin.index', compact(
             'module', 'config', 'items', 'search', 'status', 'city', 'summaryCards',
-            'parentId', 'parentCategory', 'view', 'showAllSubcategories', 'categoryViewCounts'
+            'parentId', 'parentCategory', 'view', 'isUnassignedView', 'categoryViewCounts'
         ));
     }
 
@@ -589,10 +598,18 @@ class AdminController extends Controller
         $view = trim((string) ($payload['view'] ?? ''));
         if ($parentId > 0) {
             $redirect['parent_id'] = $parentId;
-        } elseif ($view === 'subcategories') {
-            $redirect['view'] = 'subcategories';
+        } elseif ($view === 'unassigned') {
+            $redirect['view'] = 'unassigned';
         }
-        $queryParentFilter = $parentId > 0 ? $parentId : ($view === 'subcategories' ? -1 : 0);
+
+        $queryParentFilter = 0;
+        if ($module === 'categories' && Schema::hasColumn('categories', 'parent_id')) {
+            if ($parentId > 0) {
+                $queryParentFilter = $parentId;
+            } else {
+                $queryParentFilter = $view === 'unassigned' ? self::CATEGORY_UNASSIGNED : self::CATEGORY_PARENTS_ONLY;
+            }
+        }
 
         $scope = (string) $payload['delete_scope'];
         $ids = $scope === 'filtered'
@@ -661,8 +678,8 @@ class AdminController extends Controller
         $redirect = ['module' => 'categories'];
         if ($redirectParentId > 0) {
             $redirect['parent_id'] = $redirectParentId;
-        } elseif ($redirectView === 'subcategories') {
-            $redirect['view'] = 'subcategories';
+        } elseif ($redirectView === 'unassigned') {
+            $redirect['view'] = 'unassigned';
         }
 
         $parentId = (int) $payload['parent_id'];
@@ -1733,10 +1750,18 @@ class AdminController extends Controller
 
             if ($parentId > 0) {
                 $query->where('c.parent_id', $parentId);
-            } elseif ($parentId === -1) {
-                $query->whereNotNull('c.parent_id');
-            } elseif ($search === '') {
-                $query->whereNull('c.parent_id');
+            } elseif ($parentId === self::CATEGORY_UNASSIGNED) {
+                $query->whereNull('c.parent_id')->whereNotExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('categories as child')
+                        ->whereColumn('child.parent_id', 'c.id');
+                });
+            } elseif ($parentId === self::CATEGORY_PARENTS_ONLY) {
+                $query->whereNull('c.parent_id')->whereExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('categories as child')
+                        ->whereColumn('child.parent_id', 'c.id');
+                });
             }
         }
 
@@ -1746,6 +1771,18 @@ class AdminController extends Controller
         }
 
         return $query;
+    }
+
+    private function categoryHasChildrenQuery(bool $invert = false)
+    {
+        $query = DB::table('categories as c')->whereNull('c.parent_id');
+        $existsClosure = function ($sub) {
+            $sub->select(DB::raw(1))
+                ->from('categories as child')
+                ->whereColumn('child.parent_id', 'c.id');
+        };
+
+        return $invert ? $query->whereNotExists($existsClosure) : $query->whereExists($existsClosure);
     }
 
     private function supplierQuery(string $search = '', string $status = '', string $city = '')

@@ -12,7 +12,7 @@
     $canBulkAssignParent = $module === 'categories' && $items->count() > 0 && Schema::hasColumn('categories', 'parent_id');
     $parentId = $parentId ?? 0;
     $parentCategory = $parentCategory ?? null;
-    $showAllSubcategories = $showAllSubcategories ?? false;
+    $isUnassignedView = $isUnassignedView ?? false;
     $categoryViewCounts = $categoryViewCounts ?? [];
     $isCategoryDrilldown = $module === 'categories' && $parentId > 0 && $parentCategory;
 @endphp
@@ -35,13 +35,13 @@
 
         @if($module === 'categories' && $parentId === 0 && !empty($categoryViewCounts))
             <div class="tab-stats">
-                <a class="tab-stat {{ !$showAllSubcategories ? 'is-active' : '' }}" href="{{ route('admin.module.index', ['module' => 'categories']) }}">
-                    <strong>{{ number_format($categoryViewCounts['main']) }}</strong>
-                    <span>{{ __('panel.common.category_main_categories') }}</span>
+                <a class="tab-stat {{ !$isUnassignedView ? 'is-active' : '' }}" href="{{ route('admin.module.index', ['module' => 'categories']) }}">
+                    <strong>{{ number_format($categoryViewCounts['parents']) }}</strong>
+                    <span>{{ __('panel.common.category_parent_categories_tab') }}</span>
                 </a>
-                <a class="tab-stat {{ $showAllSubcategories ? 'is-active' : '' }}" href="{{ route('admin.module.index', ['module' => 'categories', 'view' => 'subcategories']) }}">
-                    <strong>{{ number_format($categoryViewCounts['subcategories']) }}</strong>
-                    <span>{{ __('panel.common.category_all_subcategories') }}</span>
+                <a class="tab-stat {{ $isUnassignedView ? 'is-active' : '' }}" href="{{ route('admin.module.index', ['module' => 'categories', 'view' => 'unassigned']) }}">
+                    <strong>{{ number_format($categoryViewCounts['unassigned']) }}</strong>
+                    <span>{{ __('panel.common.category_unassigned_tab') }}</span>
                 </a>
             </div>
         @endif
@@ -50,8 +50,8 @@
             <form method="get" class="toolbar-filters {{ count($statusOptions) <= 3 ? 'short' : '' }}">
                 @if($isCategoryDrilldown)
                     <input type="hidden" name="parent_id" value="{{ $parentId }}">
-                @elseif($showAllSubcategories)
-                    <input type="hidden" name="view" value="subcategories">
+                @elseif($isUnassignedView)
+                    <input type="hidden" name="view" value="unassigned">
                 @endif
                 <div class="search-input">
                     <input type="search" name="search" value="{{ $search }}" placeholder="{{ __('panel.common.search') }} {{ $config['title'] }}...">
@@ -86,8 +86,8 @@
                     @if($isCategoryDrilldown)
                         <a class="back-link" href="{{ route('admin.module.index', 'categories') }}">&larr; {{ __('panel.common.category_back_to_all') }}</a>
                         <h3>{{ __('panel.common.category_subcategories_of', ['name' => $parentCategory->name]) }}</h3>
-                    @elseif($showAllSubcategories)
-                        <h3>{{ __('panel.common.category_all_subcategories') }}</h3>
+                    @elseif($isUnassignedView)
+                        <h3>{{ __('panel.common.category_unassigned_tab') }}</h3>
                     @else
                         <h3>{{ $config['title'] }}</h3>
                     @endif
@@ -111,7 +111,7 @@
                     <input type="hidden" name="status" value="{{ $status }}">
                     <input type="hidden" name="city" value="{{ $city }}">
                     <input type="hidden" name="parent_id" value="{{ $parentId }}">
-                    <input type="hidden" name="view" value="{{ $showAllSubcategories ? 'subcategories' : '' }}">
+                    <input type="hidden" name="view" value="{{ $isUnassignedView ? 'unassigned' : '' }}">
 
                     <div class="bulk-actions__meta">
                         <label class="check-pill bulk-select" for="bulk-delete-toggle">
@@ -162,7 +162,7 @@
                 >
                     @csrf
                     <input type="hidden" name="redirect_parent_id" value="{{ $parentId }}">
-                    <input type="hidden" name="redirect_view" value="{{ $showAllSubcategories ? 'subcategories' : '' }}">
+                    <input type="hidden" name="redirect_view" value="{{ $isUnassignedView ? 'unassigned' : '' }}">
                     <div class="bulk-actions__meta">
                         <strong data-mirror-selection-count>{{ __('panel.common.selected_count', ['count' => 0]) }}</strong>
                         <small>{{ __('panel.common.assign_parent_help') }}</small>
