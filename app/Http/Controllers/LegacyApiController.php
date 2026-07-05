@@ -2167,10 +2167,27 @@ class LegacyApiController extends Controller
     private function normalizePhone(string $phone): string
     {
         $normalized = preg_replace('/[^\d+]/', '', trim($phone)) ?? '';
-        if ($normalized !== '' && $normalized[0] !== '+' && ctype_digit($normalized)) {
-            $normalized = '+' . $normalized;
+        if ($normalized === '') {
+            return $normalized;
         }
-        return $normalized;
+
+        if ($normalized[0] === '+') {
+            return $normalized;
+        }
+
+        // Auto-fill the default region's country code (Sudan, 249) when the
+        // user typed a bare local number, so the app never has to force a
+        // country-code picker on the phone input.
+        $defaultCountryCode = (string) $this->settingValue('default_phone_country_code', '249');
+        $digits = $normalized;
+
+        if (str_starts_with($digits, '0') && strlen($digits) === 10) {
+            $digits = $defaultCountryCode . substr($digits, 1);
+        } elseif (strlen($digits) === 9 && !str_starts_with($digits, $defaultCountryCode)) {
+            $digits = $defaultCountryCode . $digits;
+        }
+
+        return '+' . $digits;
     }
 
     private function nullableNumber($value): ?float
