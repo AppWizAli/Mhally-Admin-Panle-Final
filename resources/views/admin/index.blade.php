@@ -2,12 +2,14 @@
 
 @php
     use App\Support\AdminUi;
+    use Illuminate\Support\Facades\Schema;
 
     $statusField = $config['fields']['status'] ?? null;
     $statusOptions = is_array($statusField) ? $statusField : [];
     $canCreate = $config['creatable'] ?? !in_array($module, ['orders', 'chats', 'referral_claims', 'referral_codes', 'devices', 'otp_requests'], true);
     $canDelete = $config['deletable'] ?? !in_array($module, ['orders', 'chats', 'referral_claims', 'referral_codes', 'devices', 'otp_requests'], true);
     $canBulkDelete = $canDelete && $items->count() > 0;
+    $canBulkAssignParent = $module === 'categories' && $items->count() > 0 && Schema::hasColumn('categories', 'parent_id');
 @endphp
 
 @section('title', $config['title'])
@@ -110,6 +112,74 @@
                             data-loading-text="{{ __('panel.common.deleting_all_results') }}"
                         >
                             {{ __('panel.common.delete_all_results', ['count' => number_format($items->total())]) }}
+                        </button>
+                    </div>
+                </form>
+            @endif
+            @if($canBulkAssignParent)
+                <form
+                    id="bulk-assign-parent-form"
+                    method="post"
+                    action="{{ route('admin.categories.bulk-assign-parent') }}"
+                    class="bulk-actions"
+                    data-copy-selection-into="input[data-row-select]"
+                    data-select-required-message="{{ __('panel.messages.category_bulk_parent_no_items') }}"
+                    data-mirror-selection="input[data-row-select]"
+                    data-mirror-selection-template="{{ __('panel.common.selected_count', ['count' => '__count__']) }}"
+                    data-loading-text="{{ __('panel.common.assign_parent_loading') }}"
+                >
+                    @csrf
+                    <div class="bulk-actions__meta">
+                        <strong data-mirror-selection-count>{{ __('panel.common.selected_count', ['count' => 0]) }}</strong>
+                        <small>{{ __('panel.common.assign_parent_help') }}</small>
+                    </div>
+
+                    <div class="bulk-actions__buttons">
+                        <div
+                            class="async-picker"
+                            data-async-picker
+                            data-endpoint="{{ route('admin.async.categories') }}"
+                            data-search-placeholder="{{ __('panel.async.category_search_placeholder') }}"
+                            data-empty-label="{{ __('panel.async.category_empty_label') }}"
+                            data-empty-meta="{{ __('panel.async.category_empty_meta') }}"
+                            data-loading-text="{{ __('panel.async.loading') }}"
+                            data-empty-text="{{ __('panel.async.no_results') }}"
+                            data-error-text="{{ __('panel.async.failed') }}"
+                            data-scroll-text="{{ __('panel.async.scroll_more') }}"
+                        >
+                            <input type="hidden" id="bulk_assign_parent_id" name="parent_id" value="">
+                            <button
+                                type="button"
+                                class="async-picker__selected"
+                                data-async-picker-selected
+                                aria-expanded="false"
+                            >
+                                <span class="async-picker__selected-copy">
+                                    <strong data-async-picker-label>{{ __('panel.async.category_empty_label') }}</strong>
+                                    <small data-async-picker-meta>{{ __('panel.async.category_empty_meta') }}</small>
+                                </span>
+                                <span class="async-picker__toggle" aria-hidden="true">
+                                    <svg viewBox="0 0 20 20" fill="none" focusable="false">
+                                        <path d="M5 7.5 10 12.5 15 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                            </button>
+                            <div class="async-picker__panel" data-async-picker-panel hidden>
+                                <div class="async-picker__search-row">
+                                    <input type="search" class="async-picker__search" data-async-picker-search placeholder="{{ __('panel.async.category_search_placeholder') }}">
+                                    <button type="button" class="ghost-button async-picker__clear" data-async-picker-clear>{{ __('panel.async.clear') }}</button>
+                                </div>
+                                <div class="async-picker__results" data-async-picker-results></div>
+                                <div class="async-picker__status" data-async-picker-status>{{ __('panel.async.search_prompt') }}</div>
+                            </div>
+                        </div>
+                        <button
+                            type="submit"
+                            class="primary-button"
+                            data-mirror-selection-action
+                            disabled
+                        >
+                            {{ __('panel.common.assign_parent_submit') }}
                         </button>
                     </div>
                 </form>

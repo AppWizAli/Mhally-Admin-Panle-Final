@@ -463,6 +463,62 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSelectionState();
     });
 
+    document.querySelectorAll('[data-mirror-selection]').forEach((container) => {
+        const sourceSelector = container.dataset.mirrorSelection;
+        const countElement = container.querySelector('[data-mirror-selection-count]');
+        const actionElement = container.querySelector('[data-mirror-selection-action]');
+        const template = container.dataset.mirrorSelectionTemplate || '__count__ selected';
+
+        const updateMirrorState = () => {
+            const checkedCount = document.querySelectorAll(`${sourceSelector}:checked`).length;
+
+            if (countElement) {
+                countElement.textContent = template.replace('__count__', checkedCount.toString());
+            }
+
+            if (actionElement) {
+                actionElement.disabled = checkedCount === 0;
+            }
+        };
+
+        document.addEventListener('change', (event) => {
+            if (!event.target.matches) {
+                return;
+            }
+            if (event.target.matches(sourceSelector) || event.target.matches('[data-select-all]')) {
+                updateMirrorState();
+            }
+        });
+
+        updateMirrorState();
+    });
+
+    document.querySelectorAll('form[data-copy-selection-into]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            const sourceSelector = form.dataset.copySelectionInto;
+            const checked = Array.from(document.querySelectorAll(`${sourceSelector}:checked`));
+
+            if (checked.length === 0) {
+                event.preventDefault();
+                window.alert(form.dataset.selectRequiredMessage || 'Select at least one row first.');
+                return;
+            }
+
+            form.querySelectorAll('[data-copied-selection]').forEach((node) => node.remove());
+            checked.forEach((input) => {
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'selected_ids[]';
+                hidden.value = input.value;
+                hidden.setAttribute('data-copied-selection', 'true');
+                form.appendChild(hidden);
+            });
+
+            form.classList.add('is-submitting');
+            showLoader(form.dataset.loadingText || 'Saving your changes…');
+        });
+    });
+
     setTimeout(() => {
         document.querySelectorAll('.alert').forEach((element) => {
             element.style.transition = 'opacity .25s ease, transform .25s ease';

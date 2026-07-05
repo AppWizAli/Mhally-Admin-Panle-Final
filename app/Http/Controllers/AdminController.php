@@ -310,8 +310,8 @@ class AdminController extends Controller
         $config = $this->module($module);
         $item = DB::table($config['table'])->where('id', $id)->first();
         abort_if(!$item, 404);
-        $fieldOptions = $this->fieldOptions($module, $id);
-        $asyncFieldConfigs = $this->asyncFieldConfigs($module);
+        $fieldOptions = $this->fieldOptions($module);
+        $asyncFieldConfigs = $this->asyncFieldConfigs($module, $id);
         $selectedAsyncOptions = $this->selectedAsyncOptions($module, $item);
         $requiredFields = $this->requiredFieldMap($this->validationRules($module, $config, $id));
 
@@ -342,6 +342,16 @@ class AdminController extends Controller
             trim((string) $request->query('search', '')),
             (int) $request->query('page', 1),
             (int) $request->query('limit', 25)
+        ));
+    }
+
+    public function asyncCategories(Request $request)
+    {
+        return response()->json($this->categoryOptionsPayload(
+            trim((string) $request->query('search', '')),
+            (int) $request->query('page', 1),
+            (int) $request->query('limit', 25),
+            (int) $request->query('exclude_id', 0)
         ));
     }
 
@@ -592,6 +602,68 @@ class AdminController extends Controller
                 'count' => number_format($deleted),
                 'title' => AdminUi::moduleTitle($module),
             ]));
+    }
+
+    public function bulkAssignCategoryParent(Request $request)
+    {
+        $payload = $request->validate([
+            'parent_id' => [
+                'required',
+                'integer',
+                Rule::exists('categories', 'id')->whereNull('parent_id'),
+            ],
+            'selected_ids' => ['required', 'array', 'min:1'],
+            'selected_ids.*' => ['integer'],
+        ], [
+            'parent_id.required' => __('panel.messages.category_bulk_parent_required'),
+            'parent_id.exists' => __('panel.messages.category_parent_invalid'),
+            'selected_ids.required' => __('panel.messages.category_bulk_parent_no_items'),
+            'selected_ids.min' => __('panel.messages.category_bulk_parent_no_items'),
+        ]);
+
+        $parentId = (int) $payload['parent_id'];
+        $ids = collect($payload['selected_ids'])
+            ->map(static fn ($value) => (int) $value)
+            ->filter(static fn ($value) => $value > 0 && $value !== $parentId)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return redirect()
+                ->route('admin.module.index', 'categories')
+                ->withErrors(['bulk_assign_parent' => __('panel.messages.category_bulk_parent_no_items')]);
+        }
+
+        $blockedIds = DB::table('categories')
+            ->whereIn('parent_id', $ids->all())
+            ->pluck('parent_id')
+            ->unique()
+            ->values();
+
+        $updatableIds = $ids->diff($blockedIds)->values();
+        $updated = 0;
+
+        if ($updatableIds->isNotEmpty()) {
+            $updated = DB::table('categories')
+                ->whereIn('id', $updatableIds->all())
+                ->update(['parent_id' => $parentId, 'updated_at' => now()]);
+        }
+
+        $skipped = $ids->count() - $updatableIds->count();
+
+        if ($updated === 0) {
+            return redirect()
+                ->route('admin.module.index', 'categories')
+                ->withErrors(['bulk_assign_parent' => __('panel.messages.category_bulk_parent_all_skipped')]);
+        }
+
+        $message = $skipped > 0
+            ? __('panel.messages.category_bulk_parent_assigned_with_skips', ['count' => $updated, 'skipped' => $skipped])
+            : __('panel.messages.category_bulk_parent_assigned', ['count' => $updated]);
+
+        return redirect()
+            ->route('admin.module.index', 'categories')
+            ->with('status', $message);
     }
 
     public function saveProfile(Request $request)
@@ -1117,7 +1189,7 @@ class AdminController extends Controller
         return $title . ' could not be saved because of a server/database issue. Error ID: ' . $errorId;
     }
 
-    private function fieldOptions(string $module, ?int $excludeId = null): array
+    private function fieldOptions(string $module): array
     {
         $options = [];
 
@@ -1128,19 +1200,10 @@ class AdminController extends Controller
                 ->all();
         }
 
-        if ($module === 'categories' && Schema::hasColumn('categories', 'parent_id')) {
-            $options['parent_id'] = DB::table('categories')
-                ->whereNull('parent_id')
-                ->when($excludeId, fn ($query) => $query->where('id', '!=', $excludeId))
-                ->orderBy('name')
-                ->pluck('name', 'id')
-                ->all();
-        }
-
         return $options;
     }
 
-    private function asyncFieldConfigs(string $module): array
+    private function asyncFieldConfigs(string $module, ?int $excludeId = null): array
     {
         $configs = [];
 
@@ -1165,6 +1228,15 @@ class AdminController extends Controller
                 'search_placeholder' => __('panel.async.supplier_product_search_placeholder'),
                 'empty_label' => __('panel.async.supplier_product_empty_label'),
                 'empty_meta' => __('panel.async.supplier_product_empty_meta'),
+            ];
+        }
+
+        if ($module === 'categories' && Schema::hasColumn('categories', 'parent_id')) {
+            $configs['parent_id'] = [
+                'endpoint' => route('admin.async.categories', $excludeId ? ['exclude_id' => $excludeId] : []),
+                'search_placeholder' => __('panel.async.category_search_placeholder'),
+                'empty_label' => __('panel.async.category_empty_label'),
+                'empty_meta' => __('panel.async.category_empty_meta'),
             ];
         }
 
@@ -1195,6 +1267,13 @@ class AdminController extends Controller
             $supplierProductId = (int) data_get($item, 'supplier_product_id', 0);
             if ($supplierProductId > 0) {
                 $selected['supplier_product_id'] = $this->selectedSupplierProductOption($supplierProductId);
+            }
+        }
+
+        if ($module === 'categories') {
+            $parentId = (int) data_get($item, 'parent_id', 0);
+            if ($parentId > 0) {
+                $selected['parent_id'] = $this->selectedCategoryOption($parentId);
             }
         }
 
@@ -1292,6 +1371,33 @@ class AdminController extends Controller
         return $this->paginatedAsyncResponse($items, $page, $limit);
     }
 
+    private function categoryOptionsPayload(string $search = '', int $page = 1, int $limit = 25, int $excludeId = 0): array
+    {
+        $limit = max(1, min($limit, 50));
+        $page = max(1, $page);
+        $offset = ($page - 1) * $limit;
+
+        $query = DB::table('categories as c')
+            ->select(['c.id', 'c.name', 'c.slug', 'c.status'])
+            ->whereNull('c.parent_id');
+
+        if ($excludeId > 0) {
+            $query->where('c.id', '!=', $excludeId);
+        }
+
+        $this->applySearch($query, ['c.name', 'c.slug'], $search);
+
+        $items = $query
+            ->orderBy('c.name')
+            ->orderBy('c.id')
+            ->offset($offset)
+            ->limit($limit + 1)
+            ->get()
+            ->map(fn ($item) => $this->normalizeCategoryOption($item));
+
+        return $this->paginatedAsyncResponse($items, $page, $limit);
+    }
+
     private function paginatedAsyncResponse($items, int $page, int $limit): array
     {
         $hasMore = $items->count() > $limit;
@@ -1363,6 +1469,16 @@ class AdminController extends Controller
         return $item ? $this->normalizeSupplierProductOption($item) : null;
     }
 
+    private function selectedCategoryOption(int $id): ?array
+    {
+        $item = DB::table('categories as c')
+            ->select(['c.id', 'c.name', 'c.slug', 'c.status'])
+            ->where('c.id', $id)
+            ->first();
+
+        return $item ? $this->normalizeCategoryOption($item) : null;
+    }
+
     private function normalizeCatalogProductOption(object $item): array
     {
         $parts = array_filter([
@@ -1417,6 +1533,17 @@ class AdminController extends Controller
             'product_name' => $item->product_name,
             'business_name' => $item->business_name,
             'price' => $item->price,
+            'status' => $item->status,
+        ];
+    }
+
+    private function normalizeCategoryOption(object $item): array
+    {
+        return [
+            'id' => (int) $item->id,
+            'label' => (string) $item->name,
+            'meta' => AdminUi::statusLabel($item->status ?? null),
+            'name' => $item->name,
             'status' => $item->status,
         ];
     }
