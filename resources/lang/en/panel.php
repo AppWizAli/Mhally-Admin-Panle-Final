@@ -85,6 +85,9 @@ return [
         'assign_parent_help' => 'Select rows manually or use select all, choose a primary category, then assign it as their parent.',
         'assign_parent_submit' => 'Assign parent to selected',
         'assign_parent_loading' => 'Assigning parent category...',
+        'category_subcategories_of' => 'Subcategories of :name',
+        'category_back_to_all' => 'Back to all categories',
+        'category_view_subcategories' => 'View subcategories',
     ],
     'async' => [
         'catalog_search_placeholder' => 'Search catalog products by name, packaging, unit, or category',
@@ -217,6 +220,7 @@ return [
         'category_id' => 'Category',
         'parent_id' => 'Parent Category',
         'parent_name' => 'Parent Category',
+        'subcategory_count' => 'Subcategories',
         'icon' => 'Icon Image',
         'emoji' => 'Emoji Image',
         'image_url' => 'Image',

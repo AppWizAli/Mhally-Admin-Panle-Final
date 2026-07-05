@@ -263,12 +263,18 @@ class AdminController extends Controller
         $search = trim((string) $request->query('search', ''));
         $status = trim((string) $request->query('status', ''));
         $city = trim((string) $request->query('city', ''));
+        $parentId = (int) $request->query('parent_id', 0);
 
-        $query = $this->moduleIndexQuery($module, $search, $status, $city);
+        $query = $this->moduleIndexQuery($module, $search, $status, $city, $parentId);
         $items = $query->orderBy($orderColumn, $direction)->paginate(20)->withQueryString();
         $summaryCards = $module === 'orders' ? $this->orderSummaryCards() : [];
 
-        return view('admin.index', compact('module', 'config', 'items', 'search', 'status', 'city', 'summaryCards'));
+        $parentCategory = null;
+        if ($module === 'categories' && $parentId > 0) {
+            $parentCategory = DB::table('categories')->where('id', $parentId)->first();
+        }
+
+        return view('admin.index', compact('module', 'config', 'items', 'search', 'status', 'city', 'summaryCards', 'parentId', 'parentCategory'));
     }
 
     public function show(string $module, int $id)
@@ -552,6 +558,7 @@ class AdminController extends Controller
             'search' => ['nullable', 'string'],
             'status' => ['nullable', 'string'],
             'city' => ['nullable', 'string'],
+            'parent_id' => ['nullable', 'integer'],
         ]);
 
         $redirect = ['module' => $module];
@@ -561,6 +568,10 @@ class AdminController extends Controller
                 $redirect[$key] = $value;
             }
         }
+        $parentId = (int) ($payload['parent_id'] ?? 0);
+        if ($parentId > 0) {
+            $redirect['parent_id'] = $parentId;
+        }
 
         $scope = (string) $payload['delete_scope'];
         $ids = $scope === 'filtered'
@@ -568,7 +579,8 @@ class AdminController extends Controller
                 $module,
                 trim((string) ($payload['search'] ?? '')),
                 trim((string) ($payload['status'] ?? '')),
-                trim((string) ($payload['city'] ?? ''))
+                trim((string) ($payload['city'] ?? '')),
+                $parentId
             )->pluck('id')
             : collect($payload['selected_ids'] ?? [])
                 ->map(static fn ($value) => (int) $value)
@@ -614,12 +626,19 @@ class AdminController extends Controller
             ],
             'selected_ids' => ['required', 'array', 'min:1'],
             'selected_ids.*' => ['integer'],
+            'redirect_parent_id' => ['nullable', 'integer'],
         ], [
             'parent_id.required' => __('panel.messages.category_bulk_parent_required'),
             'parent_id.exists' => __('panel.messages.category_parent_invalid'),
             'selected_ids.required' => __('panel.messages.category_bulk_parent_no_items'),
             'selected_ids.min' => __('panel.messages.category_bulk_parent_no_items'),
         ]);
+
+        $redirectParentId = (int) ($payload['redirect_parent_id'] ?? 0);
+        $redirect = ['module' => 'categories'];
+        if ($redirectParentId > 0) {
+            $redirect['parent_id'] = $redirectParentId;
+        }
 
         $parentId = (int) $payload['parent_id'];
         $ids = collect($payload['selected_ids'])
@@ -630,7 +649,7 @@ class AdminController extends Controller
 
         if ($ids->isEmpty()) {
             return redirect()
-                ->route('admin.module.index', 'categories')
+                ->route('admin.module.index', $redirect)
                 ->withErrors(['bulk_assign_parent' => __('panel.messages.category_bulk_parent_no_items')]);
         }
 
@@ -653,7 +672,7 @@ class AdminController extends Controller
 
         if ($updated === 0) {
             return redirect()
-                ->route('admin.module.index', 'categories')
+                ->route('admin.module.index', $redirect)
                 ->withErrors(['bulk_assign_parent' => __('panel.messages.category_bulk_parent_all_skipped')]);
         }
 
@@ -662,7 +681,7 @@ class AdminController extends Controller
             : __('panel.messages.category_bulk_parent_assigned', ['count' => $updated]);
 
         return redirect()
-            ->route('admin.module.index', 'categories')
+            ->route('admin.module.index', $redirect)
             ->with('status', $message);
     }
 
@@ -1638,10 +1657,10 @@ class AdminController extends Controller
         return $query->count();
     }
 
-    private function moduleIndexQuery(string $module, string $search = '', string $status = '', string $city = '')
+    private function moduleIndexQuery(string $module, string $search = '', string $status = '', string $city = '', int $parentId = 0)
     {
         return match ($module) {
-            'categories' => $this->categoryQuery($search, $status),
+            'categories' => $this->categoryQuery($search, $status, $parentId),
             'suppliers' => $this->supplierQuery($search, $status, $city),
             'buyers' => $this->buyerQuery($search, $status),
             'products' => $this->productQuery($search, $status, $city),
@@ -1659,7 +1678,7 @@ class AdminController extends Controller
         };
     }
 
-    private function categoryQuery(string $search = '', string $status = '')
+    private function categoryQuery(string $search = '', string $status = '', int $parentId = 0)
     {
         $query = DB::table('categories as c')
             ->select('c.*')
@@ -1679,7 +1698,19 @@ class AdminController extends Controller
 
         if (Schema::hasColumn('categories', 'parent_id')) {
             $query->leftJoin('categories as parent', 'parent.id', '=', 'c.parent_id')
-                ->addSelect('parent.name as parent_name');
+                ->addSelect('parent.name as parent_name')
+                ->selectSub(
+                    DB::table('categories as sub')
+                        ->selectRaw('COUNT(*)')
+                        ->whereColumn('sub.parent_id', 'c.id'),
+                    'subcategory_count'
+                );
+
+            if ($parentId > 0) {
+                $query->where('c.parent_id', $parentId);
+            } elseif ($search === '') {
+                $query->whereNull('c.parent_id');
+            }
         }
 
         $this->applySearch($query, ['c.name', 'c.description', 'c.slug'], $search);

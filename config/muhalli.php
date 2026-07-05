@@ -6,7 +6,7 @@ return [
             'title' => 'Categories',
             'table' => 'categories',
             'order' => ['c.sort_order', 'asc'],
-            'list' => ['name', 'parent_name', 'description', 'catalog_count', 'listing_count', 'sort_order', 'status'],
+            'list' => ['name', 'parent_name', 'subcategory_count', 'description', 'catalog_count', 'listing_count', 'sort_order', 'status'],
             'form_help' => 'Organize product and supplier catalog flow with clean category management.',
             'fields' => [
                 'name' => 'text',

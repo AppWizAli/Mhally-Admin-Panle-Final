@@ -10,6 +10,9 @@
     $canDelete = $config['deletable'] ?? !in_array($module, ['orders', 'chats', 'referral_claims', 'referral_codes', 'devices', 'otp_requests'], true);
     $canBulkDelete = $canDelete && $items->count() > 0;
     $canBulkAssignParent = $module === 'categories' && $items->count() > 0 && Schema::hasColumn('categories', 'parent_id');
+    $parentId = $parentId ?? 0;
+    $parentCategory = $parentCategory ?? null;
+    $isCategoryDrilldown = $module === 'categories' && $parentId > 0 && $parentCategory;
 @endphp
 
 @section('title', $config['title'])
@@ -30,6 +33,9 @@
 
         <div class="screen-toolbar">
             <form method="get" class="toolbar-filters {{ count($statusOptions) <= 3 ? 'short' : '' }}">
+                @if($isCategoryDrilldown)
+                    <input type="hidden" name="parent_id" value="{{ $parentId }}">
+                @endif
                 <div class="search-input">
                     <input type="search" name="search" value="{{ $search }}" placeholder="{{ __('panel.common.search') }} {{ $config['title'] }}...">
                 </div>
@@ -60,7 +66,12 @@
         <section class="panel">
             <div class="page-block__header">
                 <div>
-                    <h3>{{ $config['title'] }}</h3>
+                    @if($isCategoryDrilldown)
+                        <a class="back-link" href="{{ route('admin.module.index', 'categories') }}">&larr; {{ __('panel.common.category_back_to_all') }}</a>
+                        <h3>{{ __('panel.common.category_subcategories_of', ['name' => $parentCategory->name]) }}</h3>
+                    @else
+                        <h3>{{ $config['title'] }}</h3>
+                    @endif
                     <p>{{ __('panel.common.records_found', ['count' => number_format($items->total())]) }}</p>
                 </div>
             </div>
@@ -80,6 +91,7 @@
                     <input type="hidden" name="search" value="{{ $search }}">
                     <input type="hidden" name="status" value="{{ $status }}">
                     <input type="hidden" name="city" value="{{ $city }}">
+                    <input type="hidden" name="parent_id" value="{{ $parentId }}">
 
                     <div class="bulk-actions__meta">
                         <label class="check-pill bulk-select" for="bulk-delete-toggle">
@@ -129,6 +141,7 @@
                     data-loading-text="{{ __('panel.common.assign_parent_loading') }}"
                 >
                     @csrf
+                    <input type="hidden" name="redirect_parent_id" value="{{ $parentId }}">
                     <div class="bulk-actions__meta">
                         <strong data-mirror-selection-count>{{ __('panel.common.selected_count', ['count' => 0]) }}</strong>
                         <small>{{ __('panel.common.assign_parent_help') }}</small>
@@ -224,6 +237,14 @@
                                             <strong>{{ AdminUi::primaryCell($module, $item, $column) }}</strong>
                                             <small>{{ AdminUi::secondaryCell($module, $item) }}</small>
                                         </div>
+                                    @elseif($module === 'categories' && $column === 'subcategory_count')
+                                        @if((int) $value > 0)
+                                            <a class="inline-link" href="{{ route('admin.module.index', ['module' => 'categories', 'parent_id' => $item->id]) }}" title="{{ __('panel.common.category_view_subcategories') }}">
+                                                {{ number_format((int) $value) }}
+                                            </a>
+                                        @else
+                                            {{ AdminUi::formatTableValue($column, $value) }}
+                                        @endif
                                     @else
                                         {{ AdminUi::formatTableValue($column, $value) }}
                                     @endif
