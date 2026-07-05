@@ -88,6 +88,8 @@ return [
         'category_subcategories_of' => 'Subcategories of :name',
         'category_back_to_all' => 'Back to all categories',
         'category_view_subcategories' => 'View subcategories',
+        'category_main_categories' => 'Main categories',
+        'category_all_subcategories' => 'All subcategories',
     ],
     'async' => [
         'catalog_search_placeholder' => 'Search catalog products by name, packaging, unit, or category',

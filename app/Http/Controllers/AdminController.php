@@ -264,8 +264,13 @@ class AdminController extends Controller
         $status = trim((string) $request->query('status', ''));
         $city = trim((string) $request->query('city', ''));
         $parentId = (int) $request->query('parent_id', 0);
+        $view = trim((string) $request->query('view', ''));
 
-        $query = $this->moduleIndexQuery($module, $search, $status, $city, $parentId);
+        $categoryHierarchyEnabled = $module === 'categories' && Schema::hasColumn('categories', 'parent_id');
+        $showAllSubcategories = $categoryHierarchyEnabled && $parentId === 0 && $view === 'subcategories';
+        $queryParentFilter = $parentId > 0 ? $parentId : ($showAllSubcategories ? -1 : 0);
+
+        $query = $this->moduleIndexQuery($module, $search, $status, $city, $queryParentFilter);
         $items = $query->orderBy($orderColumn, $direction)->paginate(20)->withQueryString();
         $summaryCards = $module === 'orders' ? $this->orderSummaryCards() : [];
 
@@ -274,7 +279,18 @@ class AdminController extends Controller
             $parentCategory = DB::table('categories')->where('id', $parentId)->first();
         }
 
-        return view('admin.index', compact('module', 'config', 'items', 'search', 'status', 'city', 'summaryCards', 'parentId', 'parentCategory'));
+        $categoryViewCounts = [];
+        if ($categoryHierarchyEnabled && $parentId === 0) {
+            $categoryViewCounts = [
+                'main' => DB::table('categories')->whereNull('parent_id')->count(),
+                'subcategories' => DB::table('categories')->whereNotNull('parent_id')->count(),
+            ];
+        }
+
+        return view('admin.index', compact(
+            'module', 'config', 'items', 'search', 'status', 'city', 'summaryCards',
+            'parentId', 'parentCategory', 'view', 'showAllSubcategories', 'categoryViewCounts'
+        ));
     }
 
     public function show(string $module, int $id)
@@ -559,6 +575,7 @@ class AdminController extends Controller
             'status' => ['nullable', 'string'],
             'city' => ['nullable', 'string'],
             'parent_id' => ['nullable', 'integer'],
+            'view' => ['nullable', 'string'],
         ]);
 
         $redirect = ['module' => $module];
@@ -569,9 +586,13 @@ class AdminController extends Controller
             }
         }
         $parentId = (int) ($payload['parent_id'] ?? 0);
+        $view = trim((string) ($payload['view'] ?? ''));
         if ($parentId > 0) {
             $redirect['parent_id'] = $parentId;
+        } elseif ($view === 'subcategories') {
+            $redirect['view'] = 'subcategories';
         }
+        $queryParentFilter = $parentId > 0 ? $parentId : ($view === 'subcategories' ? -1 : 0);
 
         $scope = (string) $payload['delete_scope'];
         $ids = $scope === 'filtered'
@@ -580,7 +601,7 @@ class AdminController extends Controller
                 trim((string) ($payload['search'] ?? '')),
                 trim((string) ($payload['status'] ?? '')),
                 trim((string) ($payload['city'] ?? '')),
-                $parentId
+                $queryParentFilter
             )->pluck('id')
             : collect($payload['selected_ids'] ?? [])
                 ->map(static fn ($value) => (int) $value)
@@ -627,6 +648,7 @@ class AdminController extends Controller
             'selected_ids' => ['required', 'array', 'min:1'],
             'selected_ids.*' => ['integer'],
             'redirect_parent_id' => ['nullable', 'integer'],
+            'redirect_view' => ['nullable', 'string'],
         ], [
             'parent_id.required' => __('panel.messages.category_bulk_parent_required'),
             'parent_id.exists' => __('panel.messages.category_parent_invalid'),
@@ -635,9 +657,12 @@ class AdminController extends Controller
         ]);
 
         $redirectParentId = (int) ($payload['redirect_parent_id'] ?? 0);
+        $redirectView = trim((string) ($payload['redirect_view'] ?? ''));
         $redirect = ['module' => 'categories'];
         if ($redirectParentId > 0) {
             $redirect['parent_id'] = $redirectParentId;
+        } elseif ($redirectView === 'subcategories') {
+            $redirect['view'] = 'subcategories';
         }
 
         $parentId = (int) $payload['parent_id'];
@@ -1708,6 +1733,8 @@ class AdminController extends Controller
 
             if ($parentId > 0) {
                 $query->where('c.parent_id', $parentId);
+            } elseif ($parentId === -1) {
+                $query->whereNotNull('c.parent_id');
             } elseif ($search === '') {
                 $query->whereNull('c.parent_id');
             }

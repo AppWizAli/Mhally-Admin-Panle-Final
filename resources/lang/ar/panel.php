@@ -88,6 +88,8 @@ return [
         'category_subcategories_of' => 'التصنيفات الفرعية لـ :name',
         'category_back_to_all' => 'العودة إلى جميع التصنيفات',
         'category_view_subcategories' => 'عرض التصنيفات الفرعية',
+        'category_main_categories' => 'التصنيفات الرئيسية',
+        'category_all_subcategories' => 'كل التصنيفات الفرعية',
     ],
     'async' => [
         'catalog_search_placeholder' => 'Ø§Ø¨Ø­Ø« Ø¹Ù† Ù…Ù†ØªØ¬Ø§Øª Ø§Ù„ÙƒØªØ§Ù„ÙˆØ¬ Ø¨Ø§Ù„Ø§Ø³Ù… Ø£Ùˆ Ø§Ù„ØªØ¹Ø¨Ø¦Ø© Ø£Ùˆ Ø§Ù„ÙˆØ­Ø¯Ø© Ø£Ùˆ Ø§Ù„ØªØµÙ†ÙŠÙ',
