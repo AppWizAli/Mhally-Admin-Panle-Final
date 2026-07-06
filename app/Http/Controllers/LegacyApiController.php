@@ -254,8 +254,8 @@ class LegacyApiController extends Controller
                     $orderId = $this->createOrderWithItems($orderPayload);
                     PushNotifications::notifySupplier(
                         (int) $orderPayload['supplier_id'],
-                        'New order received',
-                        'A buyer placed order ' . $orderPayload['order_number'] . '.',
+                        'طلب جديد',
+                        'قام مشترٍ بتقديم طلب رقم ' . $orderPayload['order_number'] . '.',
                         ['navigate_to' => 'supplier_orders', 'link_type' => 'order', 'link_value' => (string) $orderId]
                     );
                     return $this->ok($this->findOrder($orderId), 'Order created.', 201);
@@ -263,6 +263,10 @@ class LegacyApiController extends Controller
                 case 'supplier/dashboard':
                     $identity = $this->requireIdentity($request, 'supplier');
                     return $this->ok($this->supplierDashboardPayload((int) $identity['user_id']));
+
+                case 'supplier/notifications':
+                    $identity = $this->requireIdentity($request, 'supplier');
+                    return $this->ok($this->supplierNotificationsPayload((int) $identity['user_id'], $this->paginationParams($request, 30, 100)));
 
                 case 'supplier/profile':
                     $identity = $this->requireIdentity($request, 'supplier');
@@ -305,7 +309,8 @@ class LegacyApiController extends Controller
                 case 'supplier/catalog':
                     return $this->ok($this->supplierCatalogPayload(
                         $this->paginationParams($request, 50, 100),
-                        (int) $this->value($request, 'category_id', 0)
+                        (int) $this->value($request, 'category_id', 0),
+                        (string) $this->value($request, 'search', '')
                     ));
 
                 case 'supplier/catalog/bulk-upload':
@@ -818,8 +823,8 @@ class LegacyApiController extends Controller
 
         PushNotifications::notifyBuyer(
             (int) $order['buyer_id'],
-            'Order status updated',
-            'Order ' . $order['order_number'] . ' is now ' . $nextStatus . '.',
+            'تحديث حالة الطلب',
+            'أصبح طلبك رقم ' . $order['order_number'] . ' الآن "' . $this->arabicOrderStatusLabel($nextStatus) . '".',
             ['navigate_to' => 'orders', 'link_type' => 'order', 'link_value' => (string) $order['id']]
         );
 
@@ -1104,6 +1109,19 @@ class LegacyApiController extends Controller
         );
     }
 
+    private function supplierNotificationsPayload(int $supplierId, array $pagination = []): array
+    {
+        $limitSql = $this->limitSql($pagination);
+
+        return $this->rows(
+            'SELECT * FROM app_notifications
+             WHERE status = "active"
+               AND (target_type = "all" OR (target_type = "supplier" AND target_value = :supplier_id))
+             ORDER BY created_at DESC, id DESC' . $limitSql,
+            ['supplier_id' => (string) $supplierId]
+        );
+    }
+
     private function buyerOrdersPayload(int $buyerId, array $pagination = []): array
     {
         $limitSql = $this->limitSql($pagination);
@@ -1187,26 +1205,79 @@ class LegacyApiController extends Controller
         );
     }
 
-    private function supplierCatalogPayload(array $pagination = [], int $categoryId = 0): array
+    private function supplierCatalogPayload(array $pagination = [], int $categoryId = 0, string $search = ''): array
     {
         $limitSql = $this->limitSql($pagination);
-        $categorySql = $categoryId > 0 ? ' WHERE cp.category_id = :category_id' : '';
+        $search = trim($search);
+
+        $conditions = [];
+        $bindings = [];
+
+        if ($categoryId > 0) {
+            $conditions[] = 'cp.category_id = :category_id';
+            $bindings['category_id'] = $categoryId;
+        }
+
+        $relevanceSelect = '';
+        $orderBySql = ' ORDER BY c.name ASC, cp.name ASC';
+
+        if ($search !== '') {
+            if ($this->catalogSearchIndexExists()) {
+                // FULLTEXT lookup: an inverted-index scan instead of a full
+                // table scan, so this stays fast as the catalog grows into
+                // the hundreds of thousands or millions of rows.
+                $conditions[] = 'MATCH(cp.name, cp.packaging, cp.unit_type) AGAINST(:search IN BOOLEAN MODE)';
+                $bindings['search'] = $this->booleanModeSearchTerm($search);
+                $relevanceSelect = ', MATCH(cp.name, cp.packaging, cp.unit_type) AGAINST(:search_score IN BOOLEAN MODE) AS relevance';
+                $bindings['search_score'] = $bindings['search'];
+                $orderBySql = ' ORDER BY relevance DESC, cp.name ASC';
+            } else {
+                $conditions[] = '(cp.name LIKE :search_like OR cp.packaging LIKE :search_like OR cp.unit_type LIKE :search_like)';
+                $bindings['search_like'] = '%' . $search . '%';
+            }
+        }
+
+        $whereSql = $conditions !== [] ? ' WHERE ' . implode(' AND ', $conditions) : '';
+
         return $this->rows(
             'SELECT cp.id, cp.category_id, cp.name, cp.slug, cp.emoji, cp.packaging,
-                    cp.unit_type, cp.image_url, cp.status, c.name AS category_name
+                    cp.unit_type, cp.image_url, cp.status, c.name AS category_name' . $relevanceSelect . '
              FROM catalog_products cp
              LEFT JOIN categories c ON c.id = cp.category_id
-             ' . $categorySql . '
-             ORDER BY c.name ASC, cp.name ASC' . $limitSql,
-            $categoryId > 0 ? ['category_id' => $categoryId] : []
+             ' . $whereSql . $orderBySql . $limitSql,
+            $bindings
         );
+    }
+
+    private function catalogSearchIndexExists(): bool
+    {
+        static $exists = null;
+        if ($exists === null) {
+            $exists = !empty(DB::select(
+                'SHOW INDEX FROM `catalog_products` WHERE Key_name = ?',
+                ['ft_catalog_products_search']
+            ));
+        }
+
+        return $exists;
+    }
+
+    private function booleanModeSearchTerm(string $search): string
+    {
+        $words = preg_split('/\s+/', trim($search)) ?: [];
+        $terms = array_filter(array_map(function (string $word): string {
+            $word = preg_replace('/[+\-<>()~*"@]+/', '', $word) ?? '';
+            return $word !== '' ? '+' . $word . '*' : '';
+        }, $words));
+
+        return $terms !== [] ? implode(' ', $terms) : $search;
     }
 
     private function supplierOrdersPayload(int $supplierId, array $pagination = []): array
     {
         $limitSql = $this->limitSql($pagination);
         $orders = $this->rows(
-            'SELECT o.*, b.store_name, b.buyer_name, b.city AS buyer_city, b.address AS buyer_address,
+            'SELECT o.*, b.store_name, b.buyer_name, b.phone AS buyer_phone, b.city AS buyer_city, b.address AS buyer_address,
                     (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS item_count
              FROM orders o
              JOIN buyers b ON b.id = o.buyer_id
@@ -2188,6 +2259,19 @@ class LegacyApiController extends Controller
         }
 
         return '+' . $digits;
+    }
+
+    private function arabicOrderStatusLabel(string $status): string
+    {
+        return match (strtolower(trim($status))) {
+            'pending' => 'قيد الانتظار',
+            'processing' => 'قيد المعالجة',
+            'shipped' => 'تم الشحن',
+            'delivered' => 'تم التسليم',
+            'cancelled', 'canceled' => 'ملغي',
+            'refunded' => 'تم الاسترجاع',
+            default => $status,
+        };
     }
 
     private function nullableNumber($value): ?float

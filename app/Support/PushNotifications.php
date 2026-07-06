@@ -63,6 +63,20 @@ class PushNotifications
 
     public static function notifySupplier(int $supplierId, string $title, string $message, array $data = []): void
     {
+        if (Schema::hasTable('app_notifications')) {
+            DB::table('app_notifications')->insert([
+                'title' => $title,
+                'message' => $message,
+                'target_type' => 'supplier',
+                'target_value' => (string) $supplierId,
+                'link_type' => $data['link_type'] ?? null,
+                'link_value' => $data['link_value'] ?? null,
+                'status' => 'active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         if (!Schema::hasTable('supplier_devices')) {
             return;
         }
